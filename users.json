@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "hash": "scrypt:32768:8:1$EsbgeI1637m9ItPl$10d9d8909be99cd899cb0640bc1c7bf2d8e6132faaaba8f7a7ef0368febadac75a6ea0e2cfae820da832621924bd7db7f2a674c34efd471ad5f512337a7aac44",
+    "role": "admin",
+    "last_firewall": null
+  },
+  "deep": {
+    "hash": "scrypt:32768:8:1$rwECFXzPr7X6F93F$f0ddcf3233c10ff022dd4459d011aff57b97c01ad6ff5a8448302139f12424fae01ab615152f1d748a0b615d724107d6a8f91d4da04a6122e070e75d932586cf",
+    "role": "user"
+  }
+}

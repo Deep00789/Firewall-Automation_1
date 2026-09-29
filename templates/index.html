@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ER Tech NetOps · Firewall Automation</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
+<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='favicon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+</head>
+<body data-role="{{ role }}">
+<div class="topbar">
+<header>
+  <div class="brand">
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="Open menu" aria-controls="drawer" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <a class="brand-logo" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='netops-logo.png') }}" alt="ER Tech NetOps"></a>
+    <span class="brand-divider"></span>
+    <h1>Network/Firewall Automation</h1>
+  </div>
+  <div class="header-right">
+    <button class="conn" id="connPill" type="button"><span class="dot" id="connDot"></span><span id="connText">No firewall connected</span></button>
+    <div class="user-menu">
+      <button class="user" id="userMenuBtn" aria-haspopup="true" aria-expanded="false">
+        <span class="avatar">{{ user[:1] | upper }}</span>
+        <span class="user-name">{{ user }}</span>
+        {% if role == 'admin' %}<span class="role-tag">Admin</span>{% endif %}
+        <svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="menu" id="userMenu" hidden>
+        <div class="menu-head">Signed in as <strong>{{ user }}</strong><small>{{ 'Administrator' if role == 'admin' else 'User' }}</small></div>
+        <button type="button" id="changePwBtn">Change password</button>
+        <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="danger-text">Logout</button></form>
+      </div>
+    </div>
+  </div>
+</header>
+<nav>
+  {% set lock %}<svg class="lock" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>{% endset %}
+  <button data-tab="firewalls" class="active">Firewalls</button>
+  <button data-tab="iphosts" data-needs-fw class="locked" aria-disabled="true" data-tip="Connect to a firewall first">{{ lock }}IP Hosts</button>
+  <button data-tab="dhcp" data-needs-fw class="locked" aria-disabled="true" data-tip="Connect to a firewall first">{{ lock }}DHCP Static Leases</button>
+  {% if role == 'admin' %}
+  <button data-tab="users" class="nav-end">User Management</button>
+  <button data-tab="activity">Activity Log</button>
+  {% endif %}
+</nav>
+</div>
+<main>
+  <!-- FIREWALLS -->
+  <section id="firewalls" class="active">
+    <div class="card current-fw" id="currentFwCard">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <h2 id="currentFwTitle">Not connected</h2>
+          <p class="sub" id="currentFwSub" style="margin:0">Pick a firewall below and click Connect. Everything you do in IP Hosts and DHCP applies to the connected firewall.</p>
+        </div>
+        <button class="btn danger" id="disconnectBtn" hidden>Disconnect</button>
+      </div>
+      <div class="msg" id="connMsg"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2>Firewalls</h2><p class="sub" style="margin:0" id="fwSummary"></p></div>
+        <div class="row" style="flex:none">
+          <button class="btn secondary" id="checkAllBtn" title="Test login on every firewall in parallel">Check all status</button>
+          <button class="btn secondary admin-only" id="importFwBtn">Import CSV</button>
+          <button class="btn admin-only" id="addFwBtn">Add firewall</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <label style="flex:3 1 260px">Search
+          <span class="search-box">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input id="fwSearch" type="search" placeholder="Name, IP / URL, site, notes…" autocomplete="off">
+          </span></label>
+        <label style="flex:1 1 160px">Site <select id="fwSite"><option value="">All sites</option></select></label>
+        <label style="flex:1 1 150px">Status
+          <select id="fwStatus"><option value="">Any status</option><option value="up">Reachable</option><option value="down">Unreachable</option><option value="unknown">Not checked</option></select></label>
+      </div>
+      <div class="msg" id="fwMsg"></div>
+      <div class="table-wrap fw-wrap">
+        <table class="fw-table"><thead><tr><th style="width:28px"></th><th>Name</th><th>Site</th><th>Address</th><th>User</th><th>Last check</th><th style="text-align:right">Actions</th></tr></thead>
+        <tbody id="fwBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- IP HOSTS -->
+  <section id="iphosts">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2>IP Hosts</h2><p class="sub" style="margin:0">Type to search by name, IP, group or description. An IP also finds the networks and ranges that contain it. Click an IP List row to add IPs to it.</p></div>
+        <button class="btn secondary" id="hostLoadBtn">Refresh</button>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <label style="flex:3 1 280px">Search
+          <span class="search-box">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input id="hostSearch" type="search" placeholder="e.g. web-server, 10.0.0.5, DMZ…" autocomplete="off">
+          </span></label>
+        <label style="flex:1 1 160px">Type
+          <select id="hostType">
+            <option value="">All types</option><option value="IP">IP</option><option value="IPList">IP List</option>
+            <option value="IPRange">IP Range</option><option value="Network">Network</option>
+          </select></label>
+      </div>
+      <p class="sub" id="hostCount" style="margin:10px 0 0"></p>
+      <div class="msg" id="hostMsg"></div>
+      <div class="table-wrap" id="hostTableWrap" hidden>
+        <table><thead><tr><th>Name</th><th>Type</th><th>Address(es)</th><th>Groups</th><th>Description</th></tr></thead>
+        <tbody id="hostBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Add IPs to an IP List host</h2>
+      <p class="sub">Existing IPs, description and groups are kept. Invalid and duplicate IPs are skipped.</p>
+      <div class="row">
+        <label style="flex:1 1 220px">IP List host name <input id="editHost" placeholder="Start typing to pick an IP List host" list="ipListHosts" autocomplete="off"></label>
+        <datalist id="ipListHosts"></datalist>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label style="flex:1 1 100%">IP addresses (comma or one per line)
+          <textarea id="editIps" placeholder="192.168.37.88&#10;177.25.68.36"></textarea></label>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="addIpsBtn">Add IPs</button></div>
+      <div class="msg" id="editMsg"></div>
+    </div>
+  </section>
+
+  <!-- DHCP -->
+  <section id="dhcp">
+    <div class="card">
+      <h2>DHCP servers</h2>
+      <p class="sub">Click Load to fetch all DHCP servers configured on the firewall, then click a server to see its details.</p>
+      <div class="row">
+        <button class="btn" id="dhcpLoadBtn">Load</button>
+      </div>
+      <div class="msg" id="dhcpListMsg"></div>
+      <div class="table-wrap" id="serverTableWrap" hidden>
+        <table><thead><tr><th>Name</th><th>Interface</th><th>Gateway / Subnet</th><th>Dynamic range(s)</th><th>Static leases</th></tr></thead>
+        <tbody id="serverBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card" id="dhcpDetailCard" hidden>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2 id="dhcpTitle"></h2><p class="sub" style="margin:0">Settings and static leases of the selected server.</p></div>
+        <button class="btn secondary" id="dhcpExportBtn">Export CSV</button>
+      </div>
+      <div class="msg" id="dhcpMsg"></div>
+      <div id="dhcpInfo">
+        <div class="stats" id="dhcpStats"></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>#</th><th>Hostname</th><th>MAC address</th><th>IP address</th></tr></thead>
+          <tbody id="leaseBody"></tbody></table>
+        </div>
+      </div>
+      <div class="add-lease">
+        <h3>Add a static lease</h3>
+        <p class="sub" id="addLeaseHint">Bind a MAC address to an IP. Same checks as the CSV import: valid MAC/IP, inside the subnet, outside the dynamic range, no duplicates.</p>
+        <form class="row" id="addLeaseForm" autocomplete="off">
+          <label>Hostname <input id="leaseHost" required maxlength="63" placeholder="e.g. PRINTER-2F"></label>
+          <label>MAC address <input id="leaseMac" required placeholder="AA:BB:CC:DD:EE:FF"></label>
+          <label>IP address <input id="leaseIp" required placeholder="192.168.29.20"></label>
+          <button class="btn" id="addLeaseBtn" type="submit">Add lease</button>
+        </form>
+        <div class="msg" id="addLeaseMsg"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Add static leases from CSV</h2>
+      <p class="sub">Target server: <strong id="csvTarget">none selected</strong>. CSV columns: <code>HostName,MAC_Address,IP_Address</code>. Preview first. Nothing is sent to the firewall until you click Apply.</p>
+      <div class="row">
+        <label>CSV file <input type="file" id="csvFile" accept=".csv"></label>
+        <button class="btn secondary" id="previewBtn">Preview</button>
+        <button class="btn" id="applyBtn" disabled>Apply valid leases</button>
+      </div>
+      <div class="msg" id="csvMsg"></div>
+      <div class="table-wrap" id="previewWrap" hidden>
+        <table><thead><tr><th>Status</th><th>Hostname</th><th>MAC address</th><th>IP address</th><th>Reason</th></tr></thead>
+        <tbody id="previewBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  {% if role == 'admin' %}
+  <!-- USER MANAGEMENT (admins only) -->
+  <section id="users">
+    <div class="card">
+      <h2>Users</h2>
+      <p class="sub">People who can sign in to this portal. Admins can manage users; users can only work with the firewall.</p>
+      <div class="msg" id="usersMsg"></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Username</th><th>Role</th><th style="text-align:right">Actions</th></tr></thead>
+        <tbody id="usersBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Create user</h2>
+      <p class="sub">Username: 3–32 letters, numbers, dot, dash or underscore. Password: at least 8 characters.</p>
+      <form class="row" id="createUserForm" autocomplete="off">
+        <label>Username <input id="newUsername" required></label>
+        <label>Password <input id="newPassword" type="password" required autocomplete="new-password"></label>
+        <label>Confirm password <input id="newPassword2" type="password" required autocomplete="new-password"></label>
+        <label style="flex:0 1 140px">Role
+          <select id="newRole"><option value="user">User</option><option value="admin">Admin</option></select></label>
+        <button class="btn" id="createUserBtn" type="submit">Create user</button>
+      </form>
+      <div class="msg" id="createUserMsg"></div>
+    </div>
+  </section>
+
+  <!-- ACTIVITY LOG (admins only) -->
+  <section id="activity">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2>Activity log</h2><p class="sub" style="margin:0">Who did what in this portal: logins, firewall connections, IP host changes, DHCP imports and exports, user changes.</p></div>
+        <div class="row" style="flex:none">
+          <button class="btn secondary" id="auditRefreshBtn">Refresh</button>
+          <button class="btn secondary" id="auditExportBtn">Export CSV</button>
+        </div>
+      </div>
+      <form class="row filters" id="auditFilters">
+        <label style="flex:2 1 220px">Search <input id="fQ" placeholder="IP, hostname, MAC, server, firewall…"></label>
+        <label style="flex:1 1 140px">User <select id="fUser"><option value="">All users</option></select></label>
+        <label style="flex:1 1 160px">Firewall <select id="fFirewall"><option value="">All firewalls</option></select></label>
+        <label style="flex:1 1 150px">Category
+          <select id="fCategory">
+            <option value="">All categories</option><option value="auth">Sign-in</option><option value="firewall">Firewall connection</option>
+            <option value="iphost">IP hosts</option><option value="dhcp">DHCP leases</option><option value="users">User management</option><option value="audit">Activity log</option>
+          </select></label>
+        <label style="flex:1 1 120px">Result
+          <select id="fResult"><option value="">All</option><option value="ok">Success</option><option value="failed">Failed</option></select></label>
+        <label style="flex:1 1 140px">From <input type="date" id="fFrom"></label>
+        <label style="flex:1 1 140px">To <input type="date" id="fTo"></label>
+      </form>
+      <div class="msg" id="auditMsg"></div>
+      <div class="table-wrap audit-wrap">
+        <table class="audit"><thead><tr><th>Time</th><th>User</th><th>Firewall</th><th>Category</th><th>Action</th><th>Target</th><th>Details</th><th>Result</th></tr></thead>
+        <tbody id="auditBody"></tbody></table>
+      </div>
+      <p class="sub" id="auditCount" style="margin:10px 0 0"></p>
+    </div>
+  </section>
+  {% endif %}
+</main>
+
+<!-- Side menu (opened with the ☰ button) -->
+{% set ico_start %}<svg class="di-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{% endset %}
+{% set di_lock %}<svg class="di-lock" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>{% endset %}
+<div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Main menu" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="drawer-logo"><img src="{{ url_for('static', filename='netops-logo.png') }}" alt="ER Tech NetOps"></div>
+    <div class="drawer-user">
+      <span class="avatar">{{ user[:1] | upper }}</span>
+      <div><strong>{{ user }}</strong><small>{{ 'Administrator' if role == 'admin' else 'User' }}</small></div>
+    </div>
+    <button class="drawer-fw" id="drawerFw" type="button"><span class="dot" id="drawerFwDot"></span><span id="drawerFwText">No firewall connected</span></button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-section">Firewall operations</div>
+    <button type="button" data-tab="firewalls" class="drawer-item">{{ ico_start }}<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.3h18M3 14.7h18M9 4v5.3M15 9.3v5.4M9 14.7V20"/></svg><span class="di-text">Firewalls</span></button>
+    <button type="button" data-tab="iphosts" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v4.3M12 11.5l-5.6 5.7M12 11.5l5.6 5.7"/></svg><span class="di-text">IP Hosts<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
+    <button type="button" data-tab="dhcp" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<rect x="3" y="3.5" width="18" height="7" rx="1.6"/><rect x="3" y="13.5" width="18" height="7" rx="1.6"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg><span class="di-text">DHCP Static Leases<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
+    {% if role == 'admin' %}
+    <div class="drawer-section">Administration</div>
+    <button type="button" data-tab="users" class="drawer-item">{{ ico_start }}<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.6 6-5.6s6 2.3 6 5.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.5c2.6.2 4.5 2.2 4.5 5"/></svg><span class="di-text">User Management</span></button>
+    <button type="button" data-tab="activity" class="drawer-item">{{ ico_start }}<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M8.5 10h7M8.5 13.5h7M8.5 17h4"/></svg><span class="di-text">Activity Log</span></button>
+    {% endif %}
+  </div>
+  <div class="drawer-foot">
+    <button type="button" class="drawer-item" id="drawerChangePw">{{ ico_start }}<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2.5 2.5M14 9l2 2"/></svg><span class="di-text">Change password</span></button>
+    <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="drawer-item danger">{{ ico_start }}<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg><span class="di-text">Logout</span></button></form>
+  </div>
+</aside>
+
+<!-- Admin: add / edit firewall -->
+<dialog id="fwDialog">
+  <form method="dialog" id="fwForm" autocomplete="off">
+    <h2 id="fwDialogTitle">Add firewall</h2>
+    <p class="sub">The password is stored encrypted on this server (Windows DPAPI).</p>
+    <label>Name <input id="fwName" required maxlength="64" placeholder="e.g. Pune-Branch-FW"></label>
+    <label>Address (URL) <input id="fwUrlIn" required placeholder="https://192.168.1.1:4444"></label>
+    <div class="row">
+      <label>API username <input id="fwUserIn" required value="admin"></label>
+      <label>Password <input id="fwPassIn" type="password" autocomplete="new-password"></label>
+    </div>
+    <div class="row">
+      <label>Site <input id="fwSiteIn" list="fwSiteList" placeholder="e.g. Pune"></label>
+      <label>Notes <input id="fwNotesIn" placeholder="Optional"></label>
+    </div>
+    <datalist id="fwSiteList"></datalist>
+    <div class="msg" id="fwDialogMsg"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Cancel</button>
+      <button type="submit" class="btn" id="fwSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Admin: import firewalls from CSV -->
+<dialog id="importFwDialog" class="wide">
+  <form method="dialog" id="importFwForm">
+    <h2>Import firewalls from CSV</h2>
+    <p class="sub">Columns: <code>Name,URL,Username,Password,Site,Notes</code> (Site and Notes optional).
+      <a href="/api/firewalls/template">Download template</a>. Existing names are skipped. Delete the CSV afterwards: it contains passwords.</p>
+    <label>CSV file <input type="file" id="importFwFile" accept=".csv" required></label>
+    <div class="msg" id="importFwMsg"></div>
+    <div class="table-wrap" id="importFwWrap" hidden style="max-height:260px">
+      <table><thead><tr><th>Line</th><th>Name</th><th>Result</th></tr></thead><tbody id="importFwBody"></tbody></table>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Close</button>
+      <button type="submit" class="btn" id="importFwSubmit">Import</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Change own password -->
+<dialog id="pwDialog">
+  <form method="dialog" id="pwForm">
+    <h2>Change password</h2>
+    <p class="sub">Other sessions of your account will be signed out.</p>
+    <label>Current password <input id="pwCurrent" type="password" required autocomplete="current-password"></label>
+    <label>New password <input id="pwNew" type="password" required autocomplete="new-password"></label>
+    <label>Confirm new password <input id="pwNew2" type="password" required autocomplete="new-password"></label>
+    <div class="msg" id="pwMsg"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Cancel</button>
+      <button type="submit" class="btn" id="pwSubmit">Change password</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Admin: reset another user's password -->
+<dialog id="resetDialog">
+  <form method="dialog" id="resetForm">
+    <h2>Reset password</h2>
+    <p class="sub">Set a new password for <strong id="resetUser"></strong>. They will be signed out everywhere.</p>
+    <label>New password <input id="resetNew" type="password" required autocomplete="new-password"></label>
+    <label>Confirm new password <input id="resetNew2" type="password" required autocomplete="new-password"></label>
+    <div class="msg" id="resetMsg"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Cancel</button>
+      <button type="submit" class="btn" id="resetSubmit">Reset password</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+let previewRows = [];
+
+function showTab(name) {
+  document.querySelectorAll("[data-tab], section").forEach(el => el.classList.remove("active"));
+  document.querySelectorAll(`[data-tab="${name}"]`).forEach(el => el.classList.add("active")); $(name).classList.add("active");
+  if (name === "iphosts" && !hostsLoaded) { hostsLoaded = true; loadHosts(); $("hostSearch").focus(); }
+  if (name === "users") loadUsers();
+  if (name === "activity") loadAudit();
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => { if (!b.classList.contains("locked")) showTab(b.dataset.tab); });
+
+// Firewall tabs are locked (greyed out, with a hover tooltip) until a firewall is connected.
+function setTabsLocked(locked) {
+  document.querySelectorAll("[data-needs-fw]").forEach(b => { b.classList.toggle("locked", locked); b.setAttribute("aria-disabled", locked); });
+  if (locked) hostsLoaded = false;  // reload host list after reconnecting (may be a different firewall)
+  if (locked && document.querySelector("nav button.active")?.hasAttribute("data-needs-fw")) showTab("firewalls");
+}
+
+function showMsg(id, text, kind) { const m = $(id); m.textContent = text; m.className = `msg show ${kind}`; }
+function hideMsg(id) { $(id).className = "msg"; }
+
+function cell(tr, text, cls) { const td = document.createElement("td"); td.textContent = text ?? ""; if (cls) td.className = cls; tr.appendChild(td); return td; }
+
+async function api(url, opts = {}) {
+  const res = await fetch(url, opts);
+  if (res.status === 401) { window.location = "/login"; throw new Error("Session expired. Please log in again."); }
+  const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }));
+  if (!res.ok || data.ok === false) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+}
+
+async function busy(btn, fn) {
+  const label = btn.textContent; btn.disabled = true; btn.textContent = "Working…";
+  try { await fn(); } finally { btn.disabled = false; btn.textContent = label; }
+}
+
+// ---- Firewalls (inventory + this user's connection)
+let fwList = [], fwCurrent = null, fwEditing = null;
+const IS_ADMIN = document.body.dataset.role === "admin";
+if (!IS_ADMIN) document.querySelectorAll(".admin-only").forEach(el => el.remove());
+
+// Header pill, side menu, current-firewall card and tab locks all follow the connection.
+function setCurrentFirewall(fw) {
+  fwCurrent = fw;
+  const on = !!fw;
+  $("connDot").classList.toggle("on", on);
+  $("connText").textContent = on ? fw.name : "No firewall connected";
+  $("connPill").title = on ? `${fw.name} · ${fw.url}` : "Click to choose a firewall";
+  $("currentFwTitle").textContent = on ? `Connected to ${fw.name}` : "Not connected";
+  $("currentFwSub").textContent = on
+    ? `${fw.url}${fw.site ? " · " + fw.site : ""} · IP Hosts and DHCP now work on this firewall.`
+    : "Pick a firewall below and click Connect. Everything you do in IP Hosts and DHCP applies to the connected firewall.";
+  $("currentFwCard").classList.toggle("on", on);
+  $("drawerFwDot").classList.toggle("on", on);
+  $("drawerFwText").textContent = on ? `Connected: ${fw.name}` : "No firewall connected";
+  $("disconnectBtn").hidden = !on;
+  setTabsLocked(!on);
+  hostsLoaded = false;  // host / DHCP data belongs to the previous firewall
+  selectedServer = ""; $("dhcpDetailCard").hidden = true; $("serverTableWrap").hidden = true; $("csvTarget").textContent = "none selected";
+  renderFirewalls();
+}
+
+$("connPill").onclick = () => showTab("firewalls");
+
+function statusDot(s) {
+  const d = document.createElement("span");
+  d.className = "status-dot " + (!s ? "unknown" : s.ok ? "up" : "down");
+  d.title = !s ? "Not checked yet" : s.message;
+  return d;
+}
+
+function renderFirewalls() {
+  const tokens = $("fwSearch").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const site = $("fwSite").value, status = $("fwStatus").value;
+  const shown = fwList.filter(f => {
+    const st = !f.status ? "unknown" : f.status.ok ? "up" : "down";
+    if (site && f.site !== site) return false;
+    if (status && st !== status) return false;
+    const hay = [f.name, f.url, f.site, f.notes, f.username].join(" ").toLowerCase();
+    return tokens.every(t => hay.includes(t));
+  });
+  const body = $("fwBody"); body.replaceChildren();
+  if (!shown.length) {
+    const tr = document.createElement("tr");
+    cell(tr, fwList.length ? "No firewalls match your search." : (IS_ADMIN ? "No firewalls yet. Click \"Add firewall\" or \"Import CSV\"." : "No firewalls yet. Ask an admin to add them."), "empty").colSpan = 7;
+    body.appendChild(tr);
+  }
+  shown.forEach(f => {
+    const tr = document.createElement("tr"); const active = fwCurrent && fwCurrent.id === f.id;
+    if (active) tr.classList.add("active-fw");
+    cell(tr, "").appendChild(statusDot(f.status));
+    const n = highlightCell(tr, f.name, tokens); n.style.fontWeight = 600;
+    if (active) { const b = document.createElement("span"); b.className = "badge ok"; b.textContent = "Connected"; n.append(" ", b); }
+    if (f.notes) { const s = document.createElement("div"); s.className = "cell-note"; s.textContent = f.notes; n.appendChild(s); }
+    highlightCell(tr, f.site || "—", tokens);
+    highlightCell(tr, f.url.replace(/^https?:\/\//, ""), tokens, "mono");
+    cell(tr, f.username);
+    const chk = cell(tr, f.status ? new Date(f.status.time).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "—", "nowrap muted");
+    if (f.status && !f.status.ok) chk.title = f.status.message;
+
+    const act = cell(tr, ""); act.className = "actions";
+    const connect = document.createElement("button");
+    connect.className = active ? "btn danger-outline small" : "btn small"; connect.textContent = active ? "Disconnect" : "Connect";
+    connect.onclick = () => active ? disconnectFirewall() : connectFirewall(f, connect);
+    const test = document.createElement("button"); test.className = "btn secondary small"; test.textContent = "Test";
+    test.onclick = () => busy(test, async () => {
+      try { f.status = (await api(`/api/firewalls/${f.id}/test`, { method: "POST" })).status; renderFirewalls(); }
+      catch (e) { showMsg("fwMsg", e.message, "err"); }
+    });
+    act.append(connect, test);
+    if (IS_ADMIN) {
+      const edit = document.createElement("button"); edit.className = "btn secondary small"; edit.textContent = "Edit";
+      edit.onclick = () => openFwDialog(f);
+      const del = document.createElement("button"); del.className = "btn danger-outline small"; del.textContent = "Delete";
+      del.onclick = async () => {
+        if (!confirm(`Delete firewall "${f.name}" from the portal? (Nothing is changed on the firewall itself.)`)) return;
+        try { showMsg("fwMsg", (await jsonPost(`/api/firewalls/${f.id}`, null, "DELETE")).message, "ok"); await loadFirewalls(); }
+        catch (e) { showMsg("fwMsg", e.message, "err"); }
+      };
+      act.append(edit, del);
+    }
+    body.appendChild(tr);
+  });
+  const up = fwList.filter(f => f.status?.ok).length, down = fwList.filter(f => f.status && !f.status.ok).length;
+  $("fwSummary").textContent = `${fwList.length} firewall${fwList.length === 1 ? "" : "s"}` +
+    (up || down ? ` · ${up} reachable · ${down} unreachable` : "") +
+    (shown.length !== fwList.length ? ` · showing ${shown.length}` : "");
+}
+
+async function loadFirewalls() {
+  try {
+    const d = await api("/api/firewalls");
+    fwList = d.firewalls;
+    const sites = [...new Set(fwList.map(f => f.site).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const cur = $("fwSite").value;
+    $("fwSite").replaceChildren(new Option("All sites", ""), ...sites.map(s => new Option(s, s)));
+    $("fwSite").value = sites.includes(cur) ? cur : "";
+    if ($("fwSiteList")) $("fwSiteList").replaceChildren(...sites.map(s => new Option(s)));
+    if ((d.current?.id || null) !== (fwCurrent?.id || null)) setCurrentFirewall(d.current); else renderFirewalls();
+    return d;
+  } catch (e) { showMsg("fwMsg", e.message, "err"); }
+}
+
+async function connectFirewall(f, btn) {
+  hideMsg("connMsg");
+  const run = async () => {
+    try {
+      const d = await api(`/api/firewalls/${f.id}/connect`, { method: "POST" });
+      f.status = { ok: true, message: "Reachable, login successful", time: new Date().toISOString() };
+      setCurrentFirewall(d.firewall); showMsg("connMsg", d.message, "ok");
+      $("currentFwCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (e) {
+      f.status = { ok: false, message: e.message, time: new Date().toISOString() };
+      renderFirewalls(); showMsg("connMsg", `Could not connect to ${f.name}: ${e.message}`, "err");
+    }
+  };
+  return btn ? busy(btn, run) : run();
+}
+
+async function disconnectFirewall() {
+  try { const d = await api("/api/firewalls/disconnect", { method: "POST" }); setCurrentFirewall(null); showMsg("connMsg", d.message, "info"); }
+  catch (e) { showMsg("connMsg", e.message, "err"); }
+}
+$("disconnectBtn").onclick = () => busy($("disconnectBtn"), disconnectFirewall);
+
+// On page load: show the inventory; reconnect to the firewall this user used last time.
+(async () => {
+  const d = await loadFirewalls();
+  if (d && !d.current && d.last_used) {
+    const last = fwList.find(f => f.id === d.last_used);
+    if (last) { $("connText").textContent = `Connecting to ${last.name}…`; await connectFirewall(last); }
+  }
+})();
+
+let fwSearchTimer;
+$("fwSearch").oninput = () => { clearTimeout(fwSearchTimer); fwSearchTimer = setTimeout(renderFirewalls, 120); };
+$("fwSearch").onkeydown = e => { if (e.key === "Escape") { $("fwSearch").value = ""; renderFirewalls(); } };
+$("fwSite").onchange = renderFirewalls;
+$("fwStatus").onchange = renderFirewalls;
+
+$("checkAllBtn").onclick = () => busy($("checkAllBtn"), async () => {
+  showMsg("fwMsg", `Checking ${fwList.length} firewalls…`, "info");
+  try {
+    const { statuses } = await api("/api/firewalls/check-all", { method: "POST" });
+    fwList.forEach(f => { if (statuses[f.id]) f.status = statuses[f.id]; });
+    const up = Object.values(statuses).filter(s => s.ok).length;
+    showMsg("fwMsg", `${up} of ${Object.keys(statuses).length} firewalls reachable.`, up === Object.keys(statuses).length ? "ok" : "err");
+    renderFirewalls();
+  } catch (e) { showMsg("fwMsg", e.message, "err"); }
+});
+
+// Admin: add / edit
+function openFwDialog(f) {
+  fwEditing = f || null;
+  openDialog("fwDialog");
+  $("fwDialogTitle").textContent = f ? `Edit ${f.name}` : "Add firewall";
+  $("fwName").value = f?.name || ""; $("fwUrlIn").value = f?.url || ""; $("fwUserIn").value = f?.username || "admin";
+  $("fwSiteIn").value = f?.site || ""; $("fwNotesIn").value = f?.notes || ""; $("fwPassIn").value = "";
+  $("fwPassIn").required = !f; $("fwPassIn").placeholder = f ? "Leave empty to keep current" : "";
+}
+if ($("addFwBtn")) $("addFwBtn").onclick = () => openFwDialog(null);
+if ($("fwForm")) $("fwForm").onsubmit = e => {
+  e.preventDefault();
+  const body = { name: $("fwName").value.trim(), url: $("fwUrlIn").value.trim(), username: $("fwUserIn").value.trim(),
+                 password: $("fwPassIn").value, site: $("fwSiteIn").value.trim(), notes: $("fwNotesIn").value.trim() };
+  busy($("fwSave"), async () => {
+    try {
+      const d = fwEditing ? await jsonPost(`/api/firewalls/${fwEditing.id}`, body, "PUT") : await jsonPost("/api/firewalls", body);
+      $("fwDialog").close(); showMsg("fwMsg", d.message, "ok"); await loadFirewalls();
+    } catch (err) { showMsg("fwDialogMsg", err.message, "err"); }
+  });
+};
+
+// Admin: CSV import
+if ($("importFwBtn")) $("importFwBtn").onclick = () => { openDialog("importFwDialog"); $("importFwWrap").hidden = true; };
+if ($("importFwForm")) $("importFwForm").onsubmit = e => {
+  e.preventDefault();
+  const form = new FormData(); form.append("file", $("importFwFile").files[0]);
+  busy($("importFwSubmit"), async () => {
+    try {
+      const { results } = await api("/api/firewalls/import", { method: "POST", body: form });
+      const body = $("importFwBody"); body.replaceChildren();
+      results.forEach(r => {
+        const tr = document.createElement("tr"); cell(tr, r.line); cell(tr, r.name);
+        const b = document.createElement("span"); b.className = `badge ${r.ok ? "ok" : "warn"}`; b.textContent = r.ok ? "Added" : r.reason;
+        cell(tr, "").appendChild(b); body.appendChild(tr);
+      });
+      $("importFwWrap").hidden = false;
+      const added = results.filter(r => r.ok).length;
+      showMsg("importFwMsg", `${added} added, ${results.length - added} skipped.`, added ? "ok" : "err");
+      await loadFirewalls();
+    } catch (err) { showMsg("importFwMsg", err.message, "err"); }
+  });
+};
+
+// ---- IP Hosts
+function hostAddress(h) {
+  if (h.HostType === "IPList") return h.ListOfIPAddresses.split(",").join(", ");
+  if (h.HostType === "IPRange") return `${h.StartIPAddress} – ${h.EndIPAddress}`;
+  if (h.HostType === "Network") return `${h.IPAddress} / ${h.Subnet}`;
+  return h.IPAddress;
+}
+
+// All hosts are fetched once; searching filters them in the browser as you type.
+let allHosts = [], hostsLoaded = false;
+const TYPE_LABELS = { IP: "IP", IPList: "IP List", IPRange: "IP Range", Network: "Network" };
+
+function ipToInt(s) {
+  const p = String(s).trim().split(".");
+  if (p.length !== 4 || p.some(x => !/^\d{1,3}$/.test(x) || +x > 255)) return null;
+  return p.reduce((n, x) => n * 256 + +x, 0);
+}
+
+// Does this host cover the IP (exact IP, in list, inside range, or inside network)?
+function hostContainsIp(h, ipNum) {
+  if (h.HostType === "IP") return ipToInt(h.IPAddress) === ipNum;
+  if (h.HostType === "IPList") return h.ListOfIPAddresses.split(",").some(ip => ipToInt(ip) === ipNum);
+  if (h.HostType === "IPRange") {
+    const a = ipToInt(h.StartIPAddress), b = ipToInt(h.EndIPAddress);
+    return a !== null && b !== null && ipNum >= a && ipNum <= b;
+  }
+  if (h.HostType === "Network") {
+    const net = ipToInt(h.IPAddress), mask = ipToInt(h.Subnet);
+    return net !== null && mask !== null && ((net & mask) >>> 0) === ((ipNum & mask) >>> 0);
+  }
+  return false;
+}
+
+function hostHaystack(h) {
+  return [h.Name, TYPE_LABELS[h.HostType] || h.HostType, hostAddress(h), h.HostGroup.join(" "), h.Description].join(" ").toLowerCase();
+}
+
+// Every word must match, either as text or (for an IP address) by containment.
+function hostMatches(h, tokens) {
+  const hay = hostHaystack(h);
+  return tokens.every(t => {
+    if (hay.includes(t)) return true;
+    const ip = ipToInt(t);
+    return ip !== null && hostContainsIp(h, ip);
+  });
+}
+
+// Fill a cell with text, wrapping the searched words in <mark> (built with DOM nodes, never innerHTML).
+function highlightCell(tr, text, tokens, cls) {
+  const td = cell(tr, "", cls); text = text ?? "";
+  const lower = text.toLowerCase(), ranges = [];
+  tokens.forEach(t => { let i = lower.indexOf(t); while (t && i !== -1) { ranges.push([i, i + t.length]); i = lower.indexOf(t, i + t.length); } });
+  ranges.sort((a, b) => a[0] - b[0]);
+  let pos = 0;
+  for (const [s, e] of ranges) {
+    if (s < pos) continue;
+    td.append(text.slice(pos, s));
+    const m = document.createElement("mark"); m.textContent = text.slice(s, e); td.append(m);
+    pos = e;
+  }
+  td.append(text.slice(pos));
+  return td;
+}
+
+function renderHosts() {
+  const tokens = $("hostSearch").value.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  const type = $("hostType").value;
+  const shown = allHosts.filter(h => (!type || h.HostType === type) && hostMatches(h, tokens));
+  const body = $("hostBody"); body.replaceChildren();
+  if (!shown.length) {
+    const tr = document.createElement("tr");
+    cell(tr, allHosts.length ? "No hosts match your search." : "No IP hosts are configured on this firewall.", "empty").colSpan = 5;
+    body.appendChild(tr);
+  }
+  shown.forEach(h => {
+    const tr = document.createElement("tr");
+    highlightCell(tr, h.Name, tokens).style.fontWeight = 600;
+    const t = document.createElement("span"); t.className = "badge type"; t.textContent = TYPE_LABELS[h.HostType] || h.HostType;
+    cell(tr, "").appendChild(t);
+    highlightCell(tr, hostAddress(h), tokens, "mono");
+    highlightCell(tr, h.HostGroup.join(", "), tokens);
+    highlightCell(tr, h.Description, tokens);
+    if (h.HostType === "IPList") {
+      tr.className = "clickable"; tr.title = "Click to add IPs to this host";
+      tr.onclick = () => { $("editHost").value = h.Name; $("editIps").focus(); $("editIps").scrollIntoView({ behavior: "smooth", block: "center" }); };
+    }
+    body.appendChild(tr);
+  });
+  $("hostTableWrap").hidden = false;
+  $("hostCount").textContent = tokens.length || type ? `Showing ${shown.length} of ${allHosts.length} hosts` : `${allHosts.length} hosts`;
+}
+
+async function loadHosts() {
+  hideMsg("hostMsg");
+  try {
+    const d = await api("/api/iphosts");
+    allHosts = d.hosts.sort((a, b) => a.Name.localeCompare(b.Name, undefined, { numeric: true, sensitivity: "base" }));
+    hostsLoaded = true;
+    $("ipListHosts").replaceChildren(...allHosts.filter(h => h.HostType === "IPList").map(h => new Option(h.Name)));
+    renderHosts();
+  } catch (e) { hostsLoaded = false; showMsg("hostMsg", e.message, "err"); }
+}
+
+let hostSearchTimer;
+$("hostSearch").oninput = () => { clearTimeout(hostSearchTimer); hostSearchTimer = setTimeout(renderHosts, 120); };
+$("hostSearch").onkeydown = e => { if (e.key === "Escape") { $("hostSearch").value = ""; renderHosts(); } };
+$("hostType").onchange = renderHosts;
+$("hostLoadBtn").onclick = () => busy($("hostLoadBtn"), loadHosts);
+
+$("addIpsBtn").onclick = () => busy($("addIpsBtn"), async () => {
+  const name = $("editHost").value.trim(), ips = $("editIps").value.trim();
+  if (!name || !ips) return showMsg("editMsg", "Enter a host name and at least one IP.", "err");
+  try {
+    const d = await api("/api/iphosts/add-ips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, ips }) });
+    let text = `${d.message} Added: ${d.added.join(", ") || "none"}.`;
+    if (d.skipped?.length) text += ` Skipped: ${d.skipped.join("; ")}.`;
+    showMsg("editMsg", text, "ok"); $("editIps").value = "";
+    if ($("hostTableWrap").hidden === false) loadHosts();
+  } catch (e) { showMsg("editMsg", e.message, "err"); }
+});
+
+// ---- DHCP
+let selectedServer = "";
+const dhcpName = () => selectedServer;
+
+async function loadServers() {
+  hideMsg("dhcpListMsg");
+  try {
+    const { servers } = await api("/api/dhcp");
+    const body = $("serverBody"); body.replaceChildren();
+    if (!servers.length) { $("serverTableWrap").hidden = true; return showMsg("dhcpListMsg", "No DHCP servers are configured on this firewall.", "info"); }
+    servers.forEach(s => {
+      const tr = document.createElement("tr"); tr.className = "clickable"; tr.dataset.name = s.name;
+      cell(tr, s.name).style.fontWeight = 600; cell(tr, s.params.Interface);
+      cell(tr, `${s.params.Gateway || "Interface IP"} / ${s.params.SubnetMask}`, "mono");
+      cell(tr, s.dynamic_ranges.join(", ") || "—", "mono"); cell(tr, s.leases.length);
+      tr.onclick = () => selectServer(s.name);
+      body.appendChild(tr);
+    });
+    $("serverTableWrap").hidden = false;
+    showMsg("dhcpListMsg", `${servers.length} DHCP server(s) found. Click one to view its details.`, "info");
+  } catch (e) { showMsg("dhcpListMsg", e.message, "err"); $("serverTableWrap").hidden = true; }
+}
+
+function selectServer(name) {
+  selectedServer = name;
+  document.querySelectorAll("#serverBody tr").forEach(tr => tr.style.background = tr.dataset.name === name ? "var(--accent-soft)" : "");
+  $("dhcpTitle").textContent = name; $("csvTarget").textContent = name;
+  $("applyBtn").disabled = true; $("previewWrap").hidden = true; hideMsg("csvMsg"); hideMsg("addLeaseMsg"); $("addLeaseForm").reset();
+  $("dhcpDetailCard").hidden = false;
+  loadDhcp().then(() => $("dhcpDetailCard").scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+async function loadDhcp() {
+  hideMsg("dhcpMsg");
+  try {
+    const { server: s } = await api(`/api/dhcp/${encodeURIComponent(dhcpName())}`);
+    const stats = [["Interface", s.params.Interface], ["Gateway", s.params.Gateway || "Interface IP"],
+      ["Subnet mask", s.params.SubnetMask], ["Dynamic ranges", s.dynamic_ranges.join(", ") || "—"],
+      ["DNS", [s.params.PrimaryDNSServer, s.params.SecondaryDNSServer].filter(Boolean).join(", ") || "Appliance"],
+      ["Static leases", s.leases.length]];
+    $("dhcpStats").replaceChildren(...stats.map(([k, v]) => {
+      const d = document.createElement("div"); d.className = "stat";
+      d.innerHTML = '<div class="k"></div><div class="v"></div>';
+      d.children[0].textContent = k; d.children[1].textContent = v; return d;
+    }));
+    const body = $("leaseBody"); body.replaceChildren();
+    if (!s.leases.length) { const tr = document.createElement("tr"); cell(tr, "No static leases.", "empty").colSpan = 4; body.appendChild(tr); }
+    s.leases.forEach((l, i) => { const tr = document.createElement("tr"); cell(tr, i + 1); cell(tr, l.HName); cell(tr, l.MAC_Add, "mono"); cell(tr, l.IpAdd, "mono"); body.appendChild(tr); });
+    $("dhcpInfo").hidden = false;
+    $("addLeaseHint").textContent = `Bind a MAC address to an IP in ${s.params.Gateway || "the interface"} / ${s.params.SubnetMask}` +
+      (s.dynamic_ranges.length ? `, outside the dynamic range ${s.dynamic_ranges.join(", ")}.` : ".") +
+      " Duplicates of an existing hostname, MAC or IP are rejected.";
+    if (s.params.Gateway) $("leaseIp").placeholder = s.params.Gateway.replace(/\.\d+$/, ".20");
+  } catch (e) { showMsg("dhcpMsg", e.message, "err"); $("dhcpInfo").hidden = true; }
+}
+$("dhcpLoadBtn").onclick = () => busy($("dhcpLoadBtn"), loadServers);
+
+// Manual single static lease
+$("addLeaseForm").onsubmit = e => {
+  e.preventDefault();
+  const body = { hostname: $("leaseHost").value.trim(), mac: $("leaseMac").value.trim(), ip: $("leaseIp").value.trim() };
+  if (!confirm(`Add static lease on "${dhcpName()}"?\n\n${body.hostname}\n${body.mac} → ${body.ip}`)) return;
+  busy($("addLeaseBtn"), async () => {
+    try {
+      const d = await jsonPost(`/api/dhcp/${encodeURIComponent(dhcpName())}/add`, body);
+      showMsg("addLeaseMsg", d.message, "ok"); $("addLeaseForm").reset(); await loadDhcp(); loadServers();
+    } catch (err) { showMsg("addLeaseMsg", err.message, "err"); }
+  });
+};
+$("dhcpExportBtn").onclick = () => { window.location = `/api/dhcp/${encodeURIComponent(dhcpName())}/export`; };
+
+function renderPreview(results) {
+  const body = $("previewBody"); body.replaceChildren();
+  results.forEach(r => {
+    const tr = document.createElement("tr");
+    const b = document.createElement("span"); b.className = `badge ${r.ok ? "ok" : "warn"}`; b.textContent = r.ok ? "Will add" : "Skip";
+    cell(tr, "").appendChild(b); cell(tr, r.HName); cell(tr, r.MAC_Add, "mono"); cell(tr, r.IpAdd, "mono"); cell(tr, r.reason);
+    body.appendChild(tr);
+  });
+  $("previewWrap").hidden = false;
+}
+
+$("previewBtn").onclick = () => busy($("previewBtn"), async () => {
+  hideMsg("csvMsg"); $("applyBtn").disabled = true;
+  if (!dhcpName()) return showMsg("csvMsg", "Load the DHCP servers above and click one to select it first.", "err");
+  const file = $("csvFile").files[0];
+  if (!file) return showMsg("csvMsg", "Choose a CSV file.", "err");
+  const form = new FormData(); form.append("file", file);
+  try {
+    const d = await api(`/api/dhcp/${encodeURIComponent(dhcpName())}/preview`, { method: "POST", body: form });
+    previewRows = d.results; renderPreview(previewRows);
+    const good = previewRows.filter(r => r.ok).length;
+    showMsg("csvMsg", `${good} of ${previewRows.length} row(s) will be added to "${dhcpName()}".`, good ? "info" : "err");
+    $("applyBtn").disabled = good === 0;
+  } catch (e) { showMsg("csvMsg", e.message, "err"); $("previewWrap").hidden = true; }
+});
+
+$("applyBtn").onclick = () => {
+  const rows = previewRows.filter(r => r.ok);
+  if (!confirm(`Add ${rows.length} static lease(s) to DHCP server "${dhcpName()}"?`)) return;
+  busy($("applyBtn"), async () => {
+    try {
+      const d = await api(`/api/dhcp/${encodeURIComponent(dhcpName())}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
+      renderPreview(d.results); showMsg("csvMsg", `${d.message} — ${d.added} lease(s) added.`, "ok"); loadDhcp(); loadServers();
+    } catch (e) { showMsg("csvMsg", e.message, "err"); }
+  }).then(() => { $("applyBtn").disabled = true; });
+};
+
+// ---- Side menu (☰)
+const drawer = $("drawer"), backdrop = $("drawerBackdrop");
+function openDrawer() {
+  backdrop.hidden = false;
+  void backdrop.offsetWidth;  // apply the un-hidden state first so the fade/slide animates
+  drawer.classList.add("open"); backdrop.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false"); $("menuBtn").setAttribute("aria-expanded", "true");
+  toggleMenu(false);
+  (drawer.querySelector(".drawer-item.active") || drawer.querySelector(".drawer-item")).focus();
+}
+function closeDrawer() {
+  if (!drawer.classList.contains("open")) return;
+  drawer.classList.remove("open"); backdrop.classList.remove("open");
+  drawer.setAttribute("aria-hidden", "true"); $("menuBtn").setAttribute("aria-expanded", "false");
+  setTimeout(() => { if (!drawer.classList.contains("open")) backdrop.hidden = true; }, 250);
+  $("menuBtn").focus();
+}
+$("menuBtn").onclick = () => drawer.classList.contains("open") ? closeDrawer() : openDrawer();
+backdrop.onclick = closeDrawer;
+document.addEventListener("keydown", e => {
+  if (!drawer.classList.contains("open")) return;
+  if (e.key === "Escape") { e.preventDefault(); closeDrawer(); }
+  if (e.key === "Tab") {  // keep keyboard focus inside the open menu
+    const items = [...drawer.querySelectorAll("button:not([disabled])")];
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+});
+drawer.querySelectorAll(".drawer-item[data-tab]").forEach(b => b.onclick = () => {
+  if (b.classList.contains("locked")) { b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake"); return; }
+  showTab(b.dataset.tab); closeDrawer();
+});
+$("drawerFw").onclick = () => { showTab("firewalls"); closeDrawer(); };
+document.querySelectorAll('[data-tab="firewalls"]').forEach(el => el.classList.add("active"));  // start page
+$("drawerChangePw").onclick = () => { closeDrawer(); openDialog("pwDialog"); };
+
+// ---- User menu (header)
+const jsonPost = (url, body, method = "POST") =>
+  api(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+function toggleMenu(open) { $("userMenu").hidden = !open; $("userMenuBtn").setAttribute("aria-expanded", open); }
+$("userMenuBtn").onclick = e => { e.stopPropagation(); toggleMenu($("userMenu").hidden); };
+document.addEventListener("click", e => { if (!e.target.closest(".user-menu")) toggleMenu(false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") toggleMenu(false); });
+
+document.querySelectorAll("dialog [data-close]").forEach(b => b.onclick = () => b.closest("dialog").close());
+
+function openDialog(id) {
+  const d = $(id); d.querySelector("form").reset(); d.querySelector(".msg").className = "msg"; d.showModal();
+}
+
+$("changePwBtn").onclick = () => { toggleMenu(false); openDialog("pwDialog"); };
+$("pwForm").onsubmit = e => {
+  e.preventDefault();
+  if ($("pwNew").value !== $("pwNew2").value) return showMsg("pwMsg", "New passwords do not match.", "err");
+  busy($("pwSubmit"), async () => {
+    try {
+      const d = await jsonPost("/api/account/password", { current: $("pwCurrent").value, new: $("pwNew").value });
+      showMsg("pwMsg", d.message, "ok"); setTimeout(() => $("pwDialog").close(), 1200);
+    } catch (err) { showMsg("pwMsg", err.message, "err"); }
+  });
+};
+
+// ---- User management (admins only)
+async function loadUsers() {
+  if (!$("usersBody")) return;
+  try {
+    const { users, me } = await api("/api/users");
+    const body = $("usersBody"); body.replaceChildren();
+    users.forEach(u => {
+      const tr = document.createElement("tr"); const self = u.username === me;
+      const nameCell = cell(tr, u.username); nameCell.style.fontWeight = 600;
+      if (self) { const t = document.createElement("span"); t.className = "badge you"; t.textContent = "You"; nameCell.append(" ", t); }
+
+      const roleSel = document.createElement("select"); roleSel.className = "compact";
+      roleSel.innerHTML = '<option value="user">User</option><option value="admin">Admin</option>';
+      roleSel.value = u.role; roleSel.disabled = self;
+      if (self) roleSel.title = "You cannot change your own role";
+      roleSel.onchange = async () => {
+        try { showMsg("usersMsg", (await jsonPost(`/api/users/${encodeURIComponent(u.username)}/role`, { role: roleSel.value })).message, "ok"); }
+        catch (err) { showMsg("usersMsg", err.message, "err"); roleSel.value = u.role; }
+      };
+      cell(tr, "").appendChild(roleSel);
+
+      const actions = cell(tr, ""); actions.className = "actions";
+      const reset = document.createElement("button"); reset.className = "btn secondary small"; reset.textContent = "Reset password";
+      reset.onclick = () => { $("resetUser").textContent = u.username; openDialog("resetDialog"); };
+      const del = document.createElement("button"); del.className = "btn danger-outline small"; del.textContent = "Delete";
+      del.disabled = self; if (self) del.title = "You cannot delete your own account";
+      del.onclick = async () => {
+        if (!confirm(`Delete user "${u.username}"? They will be signed out immediately.`)) return;
+        try { showMsg("usersMsg", (await jsonPost(`/api/users/${encodeURIComponent(u.username)}`, null, "DELETE")).message, "ok"); loadUsers(); }
+        catch (err) { showMsg("usersMsg", err.message, "err"); }
+      };
+      actions.append(reset, del);
+      body.appendChild(tr);
+    });
+  } catch (err) { showMsg("usersMsg", err.message, "err"); }
+}
+
+if ($("createUserForm")) $("createUserForm").onsubmit = e => {
+  e.preventDefault();
+  if ($("newPassword").value !== $("newPassword2").value) return showMsg("createUserMsg", "Passwords do not match.", "err");
+  busy($("createUserBtn"), async () => {
+    try {
+      const d = await jsonPost("/api/users", { username: $("newUsername").value.trim(), password: $("newPassword").value, role: $("newRole").value });
+      showMsg("createUserMsg", d.message, "ok"); $("createUserForm").reset(); loadUsers();
+    } catch (err) { showMsg("createUserMsg", err.message, "err"); }
+  });
+};
+
+// ---- Activity log (admins only)
+const CATEGORY_LABELS = { auth: "Sign-in", firewall: "Firewall", iphost: "IP hosts", dhcp: "DHCP", users: "Users", audit: "Activity log" };
+
+function auditQuery() {
+  // Dates are the viewer's local days, sent as exact UTC instants.
+  const from = $("fFrom").value ? new Date(`${$("fFrom").value}T00:00:00`).toISOString() : "";
+  const to = $("fTo").value ? new Date(`${$("fTo").value}T23:59:59.999`).toISOString() : "";
+  const p = new URLSearchParams({ q: $("fQ").value.trim(), user: $("fUser").value, category: $("fCategory").value,
+                                  result: $("fResult").value, firewall: $("fFirewall").value, from, to });
+  [...p.keys()].forEach(k => { if (!p.get(k)) p.delete(k); });
+  return p.toString();
+}
+
+async function loadAudit() {
+  if (!$("auditBody")) return;
+  hideMsg("auditMsg");
+  try {
+    const { entries, users, firewalls: fwNames } = await api(`/api/audit?${auditQuery()}`);
+    const curFw = $("fFirewall").value;
+    $("fFirewall").replaceChildren(new Option("All firewalls", ""), ...fwNames.map(n => new Option(n, n)));
+    $("fFirewall").value = curFw;
+    const current = $("fUser").value;
+    $("fUser").replaceChildren(new Option("All users", ""), ...users.map(u => new Option(u, u)));
+    $("fUser").value = current;
+
+    const body = $("auditBody"); body.replaceChildren();
+    if (!entries.length) {
+      const tr = document.createElement("tr"); cell(tr, "No activity matches these filters.", "empty").colSpan = 8; body.appendChild(tr);
+    }
+    entries.forEach(e => {
+      const tr = document.createElement("tr");
+      const t = new Date(e.time);
+      const timeCell = cell(tr, t.toLocaleString([], { dateStyle: "medium", timeStyle: "medium" }), "nowrap");
+      timeCell.title = e.time + (e.ip ? ` · from ${e.ip}` : "");
+      cell(tr, e.user).style.fontWeight = 600;
+      cell(tr, e.firewall || "—", "nowrap");
+      const cat = document.createElement("span"); cat.className = `badge cat-${e.category}`; cat.textContent = CATEGORY_LABELS[e.category] || e.category;
+      cell(tr, "").appendChild(cat);
+      cell(tr, e.action);
+      cell(tr, e.target, "mono");
+      const det = cell(tr, "", "details"); det.title = "Click to expand";
+      const clamp = document.createElement("div"); clamp.className = "clamp"; clamp.textContent = e.details; det.appendChild(clamp);
+      det.onclick = () => det.classList.toggle("open");
+      const res = document.createElement("span"); res.className = `badge ${e.ok ? "ok" : "fail"}`; res.textContent = e.ok ? "Success" : "Failed";
+      cell(tr, "").appendChild(res);
+      if (!e.ok) tr.classList.add("failed");
+      body.appendChild(tr);
+    });
+    $("auditCount").textContent = entries.length >= 500 ? "Showing the 500 most recent matching entries. Narrow the filters or export to see everything."
+                                                        : `${entries.length} entr${entries.length === 1 ? "y" : "ies"}.`;
+  } catch (err) { showMsg("auditMsg", err.message, "err"); }
+}
+
+if ($("auditFilters")) {
+  let timer;
+  $("auditFilters").onsubmit = e => e.preventDefault();
+  $("auditFilters").oninput = () => { clearTimeout(timer); timer = setTimeout(loadAudit, 300); };
+  $("auditRefreshBtn").onclick = () => busy($("auditRefreshBtn"), loadAudit);
+  $("auditExportBtn").onclick = () => { window.location = `/api/audit/export?${auditQuery()}`; };
+}
+
+if ($("resetForm")) $("resetForm").onsubmit = e => {
+  e.preventDefault();
+  if ($("resetNew").value !== $("resetNew2").value) return showMsg("resetMsg", "Passwords do not match.", "err");
+  busy($("resetSubmit"), async () => {
+    try {
+      const d = await jsonPost(`/api/users/${encodeURIComponent($("resetUser").textContent)}/password`, { password: $("resetNew").value });
+      showMsg("resetMsg", d.message, "ok"); showMsg("usersMsg", d.message, "ok"); setTimeout(() => $("resetDialog").close(), 1200);
+    } catch (err) { showMsg("resetMsg", err.message, "err"); }
+  });
+};
+</script>
+</body>
+</html>

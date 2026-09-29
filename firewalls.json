@@ -1,0 +1,13 @@
+[
+  {
+    "id": "dbd2a991b84b",
+    "name": "TestFirewall",
+    "url": "https://192.168.159.133:4444",
+    "username": "admin",
+    "password": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAXOvfXkm6MkWt0YFySjplVgAAAAACAAAAAAAQZgAAAAEAACAAAACN1BuWXFkNuw/TbqQQHD5eLsVac6Qr8yI9nE1WLxPJWAAAAAAOgAAAAAIAACAAAACa4sJdQoENKQxkzTKvHMG0YeIqI0Gc/KZ63GwA/qLKNBAAAAB78xG9vwExApz/hMdSV7rqQAAAAGvLstbKnCbyl9gRLqIouFCxHm/vN7szPEXCEPYMg84uMEALEXs+Ze9CCiXuknSBobTAPVSvYK/EViXqpLKbX0M=",
+    "site": "",
+    "notes": "",
+    "created_by": "admin",
+    "created_at": "2026-09-28T09:55:14+00:00"
+  }
+]

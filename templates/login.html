@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · ER Tech NetOps</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
+<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='favicon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <img class="company-logo" src="{{ url_for('static', filename='logo.webp') }}" alt="ER Tech Pros — IT | Cloud | Compliance">
+      <h1><img class="product-logo" src="{{ url_for('static', filename='netops-logo.png') }}" alt="ER Tech NetOps — Network Automation &amp; Operations"></h1>
+    </div>
+    <p class="sub">Sign in to continue.</p>
+
+    {% if no_users %}
+      <div class="msg show info">
+        No users have been created yet. Create one from the project folder, then refresh this page:<br><br>
+        <code>firewallautomation\Scripts\python.exe manage_users.py add admin</code>
+      </div>
+    {% else %}
+      {% if error %}<div class="msg show err">{{ error }}</div>{% endif %}
+      <form method="post" autocomplete="off">
+        <label>Username <input name="username" value="{{ username }}" required autofocus></label>
+        <label>Password <input name="password" type="password" required></label>
+        <button class="btn" type="submit">Sign in</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
