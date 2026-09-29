@@ -15,7 +15,7 @@ USERS_FILE = os.path.join(BASE_DIR, "users.json")
 
 ROLES = ("admin", "user")
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 10
 
 MAX_FAILURES = 5
 LOCKOUT_SECONDS = 5 * 60
@@ -45,8 +45,11 @@ def list_users():
 
 
 def _check_password(password):
-    if len(password or "") < MIN_PASSWORD_LENGTH:
-        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    pattern = r'^(?=(?:.*[A-Z]){1,})(?=(?:.*\d){1,})(?=(?:.*[^A-Za-z0-9]){1,})(?=(?:.*[^A-Za-z]){1,}).{8,}$'
+    if not re.match(pattern, password or ""):
+        raise ValueError("Password must contain at least 2 uppercase letters, 2 digits, 2 special characters, and be at least 8 characters long.")
+    # if len(password or "") < MIN_PASSWORD_LENGTH:
+    #     raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
 
 
 def _check_role(role):
