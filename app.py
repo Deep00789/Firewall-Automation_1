@@ -14,6 +14,7 @@ import audit
 import auth
 import firewalls
 import IPHost
+import MACHost
 import Sophos_Dhcp
 import Sophos_Login_And_Sendrequest as sophoslogin
 
@@ -21,7 +22,7 @@ app = Flask(__name__)
 firewalls.migrate_legacy()
 
 # Routes that talk to the firewall the user is connected to (session["fw_id"]).
-FIREWALL_ROUTES = ("/api/iphosts", "/api/dhcp")
+FIREWALL_ROUTES = ("/api/iphosts", "/api/machosts", "/api/dhcp")
 
 
 def record(category, action, target="", details="", ok=True, user=None, firewall=None):
@@ -362,6 +363,26 @@ def add_ips():
     if result.get("skipped"):
         details += f"; Skipped: {'; '.join(result['skipped'])}"
     record("iphost", "Add IPs to IP host", name, f"{details}; {result['message']}", ok=result["ok"])
+    return jsonify(result)
+
+
+# ---- MAC hosts
+@app.get("/api/machosts")
+def list_machosts():
+    return jsonify({"ok": True, "hosts": MACHost.get_MACHosts("ALL")})
+
+
+@app.post("/api/machosts/add-macs")
+def add_macs():
+    data = request.get_json(force=True)
+    name = data.get("name", "")
+    macs = [m for m in data.get("macs", "").replace("\n", ",").split(",") if m.strip()]
+    with audited("machost", "Add MACs to MAC host", name):
+        result = MACHost.edit_MACHost(name, macs)
+    details = f"Added: {', '.join(result.get('added', [])) or 'none'}"
+    if result.get("skipped"):
+        details += f"; Skipped: {'; '.join(result['skipped'])}"
+    record("machost", "Add MACs to MAC host", name, f"{details}; {result['message']}", ok=result["ok"])
     return jsonify(result)
 
 

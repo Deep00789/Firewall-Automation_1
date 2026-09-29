@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BASE_DIR, "audit.log")
-CATEGORIES = ("auth", "firewall", "iphost", "dhcp", "users", "audit")
+CATEGORIES = ("auth", "firewall", "iphost", "machost", "dhcp", "users", "audit")
 _lock = threading.Lock()
 
 

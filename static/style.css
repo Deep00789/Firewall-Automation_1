@@ -175,6 +175,7 @@
   .badge.cat-auth { background: #eef2ff; color: #4338ca; }
   .badge.cat-firewall { background: #ecfeff; color: #0e7490; }
   .badge.cat-iphost { background: #f0fdf4; color: #15803d; }
+  .badge.cat-machost { background: #f5f3ff; color: #6d28d9; }
   .badge.cat-dhcp { background: #fff7ed; color: #c2410c; }
   .badge.cat-users { background: #fdf2f8; color: #be185d; }
   .badge.cat-audit { background: var(--bg); color: var(--muted); }
@@ -182,6 +183,7 @@
     .badge.cat-auth { background: #23254a; color: #a5b4fc; }
     .badge.cat-firewall { background: #0f3038; color: #67e8f9; }
     .badge.cat-iphost { background: #13301f; color: #86efac; }
+    .badge.cat-machost { background: #2a1f4a; color: #c4b5fd; }
     .badge.cat-dhcp { background: #3a2412; color: #fdba74; }
     .badge.cat-users { background: #3a1830; color: #f9a8d4; }
   }

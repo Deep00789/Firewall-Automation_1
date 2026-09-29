@@ -38,16 +38,7 @@
     </div>
   </div>
 </header>
-<nav>
-  {% set lock %}<svg class="lock" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>{% endset %}
-  <button data-tab="firewalls" class="active">Firewalls</button>
-  <button data-tab="iphosts" data-needs-fw class="locked" aria-disabled="true" data-tip="Connect to a firewall first">{{ lock }}IP Hosts</button>
-  <button data-tab="dhcp" data-needs-fw class="locked" aria-disabled="true" data-tip="Connect to a firewall first">{{ lock }}DHCP Static Leases</button>
-  {% if role == 'admin' %}
-  <button data-tab="users" class="nav-end">User Management</button>
-  <button data-tab="activity">Activity Log</button>
-  {% endif %}
-</nav>
+
 </div>
 <main>
   <!-- FIREWALLS -->
@@ -129,6 +120,47 @@
       </div>
       <div class="row" style="margin-top:12px"><button class="btn" id="addIpsBtn">Add IPs</button></div>
       <div class="msg" id="editMsg"></div>
+    </div>
+  </section>
+
+  <!-- MAC HOSTS -->
+  <section id="machosts">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2>MAC Hosts</h2><p class="sub" style="margin:0">Type to search by name, MAC address or description (any format: AA:BB:…, aa-bb-…, or part of a MAC). Click a MAC List row to add MACs to it.</p></div>
+        <button class="btn secondary" id="macLoadBtn">Refresh</button>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <label style="flex:3 1 280px">Search
+          <span class="search-box">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input id="macSearch" type="search" placeholder="e.g. printer, 00:16:76, AA-BB-CC-DD-EE-FF…" autocomplete="off">
+          </span></label>
+        <label style="flex:1 1 160px">Type
+          <select id="macType">
+            <option value="">All types</option><option value="MACADDRESS">MAC Address</option><option value="MACLIST">MAC List</option>
+          </select></label>
+      </div>
+      <p class="sub" id="macCount" style="margin:10px 0 0"></p>
+      <div class="msg" id="macMsg"></div>
+      <div class="table-wrap" id="macTableWrap" hidden>
+        <table><thead><tr><th>Name</th><th>Type</th><th>MAC address(es)</th><th>Description</th></tr></thead>
+        <tbody id="macBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Add MACs to a MAC List host</h2>
+      <p class="sub">Existing MACs and description are kept. Invalid and duplicate MACs are skipped. Any format is accepted and saved as AA:BB:CC:DD:EE:FF.</p>
+      <div class="row">
+        <label style="flex:1 1 220px">MAC List host name <input id="editMacHost" placeholder="Start typing to pick a MAC List host" list="macListHosts" autocomplete="off"></label>
+        <datalist id="macListHosts"></datalist>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label style="flex:1 1 100%">MAC addresses (comma or one per line)
+          <textarea id="editMacs" placeholder="00:16:76:49:33:CE&#10;a4-d1-8c-ec-e0-e0"></textarea></label>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="addMacsBtn">Add MACs</button></div>
+      <div class="msg" id="editMacMsg"></div>
     </div>
   </section>
 
@@ -231,7 +263,7 @@
         <label style="flex:1 1 150px">Category
           <select id="fCategory">
             <option value="">All categories</option><option value="auth">Sign-in</option><option value="firewall">Firewall connection</option>
-            <option value="iphost">IP hosts</option><option value="dhcp">DHCP leases</option><option value="users">User management</option><option value="audit">Activity log</option>
+            <option value="iphost">IP hosts</option><option value="machost">MAC hosts</option><option value="dhcp">DHCP leases</option><option value="users">User management</option><option value="audit">Activity log</option>
           </select></label>
         <label style="flex:1 1 120px">Result
           <select id="fResult"><option value="">All</option><option value="ok">Success</option><option value="failed">Failed</option></select></label>
@@ -266,6 +298,7 @@
     <div class="drawer-section">Firewall operations</div>
     <button type="button" data-tab="firewalls" class="drawer-item">{{ ico_start }}<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.3h18M3 14.7h18M9 4v5.3M15 9.3v5.4M9 14.7V20"/></svg><span class="di-text">Firewalls</span></button>
     <button type="button" data-tab="iphosts" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v4.3M12 11.5l-5.6 5.7M12 11.5l5.6 5.7"/></svg><span class="di-text">IP Hosts<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
+    <button type="button" data-tab="machosts" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 18v2M11 18v2M15 18v2M7 10h4v4H7zM14 10h3M14 13h3"/></svg><span class="di-text">MAC Hosts<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
     <button type="button" data-tab="dhcp" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<rect x="3" y="3.5" width="18" height="7" rx="1.6"/><rect x="3" y="13.5" width="18" height="7" rx="1.6"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg><span class="di-text">DHCP Static Leases<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
     {% if role == 'admin' %}
     <div class="drawer-section">Administration</div>
@@ -360,6 +393,7 @@ function showTab(name) {
   document.querySelectorAll("[data-tab], section").forEach(el => el.classList.remove("active"));
   document.querySelectorAll(`[data-tab="${name}"]`).forEach(el => el.classList.add("active")); $(name).classList.add("active");
   if (name === "iphosts" && !hostsLoaded) { hostsLoaded = true; loadHosts(); $("hostSearch").focus(); }
+  if (name === "machosts" && !macsLoaded) { macsLoaded = true; loadMacHosts(); $("macSearch").focus(); }
   if (name === "users") loadUsers();
   if (name === "activity") loadAudit();
 }
@@ -368,7 +402,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => { if (!b.
 // Firewall tabs are locked (greyed out, with a hover tooltip) until a firewall is connected.
 function setTabsLocked(locked) {
   document.querySelectorAll("[data-needs-fw]").forEach(b => { b.classList.toggle("locked", locked); b.setAttribute("aria-disabled", locked); });
-  if (locked) hostsLoaded = false;  // reload host list after reconnecting (may be a different firewall)
+  if (locked) hostsLoaded = macsLoaded = false;  // reload host lists after reconnecting (may be a different firewall)
   if (locked && document.querySelector("nav button.active")?.hasAttribute("data-needs-fw")) showTab("firewalls");
 }
 
@@ -411,7 +445,7 @@ function setCurrentFirewall(fw) {
   $("drawerFwText").textContent = on ? `Connected: ${fw.name}` : "No firewall connected";
   $("disconnectBtn").hidden = !on;
   setTabsLocked(!on);
-  hostsLoaded = false;  // host / DHCP data belongs to the previous firewall
+  hostsLoaded = macsLoaded = false;  // host / DHCP data belongs to the previous firewall
   selectedServer = ""; $("dhcpDetailCard").hidden = true; $("serverTableWrap").hidden = true; $("csvTarget").textContent = "none selected";
   renderFirewalls();
 }
@@ -710,6 +744,76 @@ $("addIpsBtn").onclick = () => busy($("addIpsBtn"), async () => {
   } catch (e) { showMsg("editMsg", e.message, "err"); }
 });
 
+// ---- MAC Hosts (same pattern as IP Hosts: fetch once, filter in the browser)
+let allMacHosts = [], macsLoaded = false;
+const MAC_TYPE_LABELS = { MACADDRESS: "MAC Address", MACLIST: "MAC List" };
+const macTypeKey = h => (h.Type || "").toUpperCase();
+const macsOf = h => macTypeKey(h) === "MACLIST" ? h.ListOfMACAddresses : [h.MACAddress].filter(Boolean);
+// Search ignores separators, so "aabbcc", "AA:BB:CC" and "aa-bb-cc" all match.
+const macDigits = s => String(s).toLowerCase().replace(/[^0-9a-f]/g, "");
+
+function macMatches(h, tokens) {
+  const hay = [h.Name, MAC_TYPE_LABELS[macTypeKey(h)] || h.Type, macsOf(h).join(" "), h.Description].join(" ").toLowerCase();
+  const hexHay = macsOf(h).map(macDigits).join(" ");
+  return tokens.every(t => hay.includes(t) || (macDigits(t).length >= 4 && hexHay.includes(macDigits(t))));
+}
+
+function renderMacHosts() {
+  const tokens = $("macSearch").value.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  const type = $("macType").value;
+  const shown = allMacHosts.filter(h => (!type || macTypeKey(h) === type) && macMatches(h, tokens));
+  const body = $("macBody"); body.replaceChildren();
+  if (!shown.length) {
+    const tr = document.createElement("tr");
+    cell(tr, allMacHosts.length ? "No MAC hosts match your search." : "No MAC hosts are configured on this firewall.", "empty").colSpan = 4;
+    body.appendChild(tr);
+  }
+  shown.forEach(h => {
+    const tr = document.createElement("tr");
+    highlightCell(tr, h.Name, tokens).style.fontWeight = 600;
+    const t = document.createElement("span"); t.className = "badge type"; t.textContent = MAC_TYPE_LABELS[macTypeKey(h)] || h.Type;
+    cell(tr, "").appendChild(t);
+    highlightCell(tr, macsOf(h).join(", "), tokens, "mono");
+    highlightCell(tr, h.Description, tokens);
+    if (macTypeKey(h) === "MACLIST") {
+      tr.className = "clickable"; tr.title = "Click to add MACs to this host";
+      tr.onclick = () => { $("editMacHost").value = h.Name; $("editMacs").focus(); $("editMacs").scrollIntoView({ behavior: "smooth", block: "center" }); };
+    }
+    body.appendChild(tr);
+  });
+  $("macTableWrap").hidden = false;
+  $("macCount").textContent = tokens.length || type ? `Showing ${shown.length} of ${allMacHosts.length} MAC hosts` : `${allMacHosts.length} MAC hosts`;
+}
+
+async function loadMacHosts() {
+  hideMsg("macMsg");
+  try {
+    const d = await api("/api/machosts");
+    allMacHosts = d.hosts.sort((a, b) => a.Name.localeCompare(b.Name, undefined, { numeric: true, sensitivity: "base" }));
+    macsLoaded = true;
+    $("macListHosts").replaceChildren(...allMacHosts.filter(h => macTypeKey(h) === "MACLIST").map(h => new Option(h.Name)));
+    renderMacHosts();
+  } catch (e) { macsLoaded = false; showMsg("macMsg", e.message, "err"); }
+}
+
+let macSearchTimer;
+$("macSearch").oninput = () => { clearTimeout(macSearchTimer); macSearchTimer = setTimeout(renderMacHosts, 120); };
+$("macSearch").onkeydown = e => { if (e.key === "Escape") { $("macSearch").value = ""; renderMacHosts(); } };
+$("macType").onchange = renderMacHosts;
+$("macLoadBtn").onclick = () => busy($("macLoadBtn"), loadMacHosts);
+
+$("addMacsBtn").onclick = () => busy($("addMacsBtn"), async () => {
+  const name = $("editMacHost").value.trim(), macs = $("editMacs").value.trim();
+  if (!name || !macs) return showMsg("editMacMsg", "Enter a MAC List host name and at least one MAC address.", "err");
+  try {
+    const d = await jsonPost("/api/machosts/add-macs", { name, macs });
+    let text = `${d.message} Added: ${d.added.join(", ") || "none"}.`;
+    if (d.skipped?.length) text += ` Skipped: ${d.skipped.join("; ")}.`;
+    showMsg("editMacMsg", text, d.ok ? "ok" : "err"); if (d.ok) $("editMacs").value = "";
+    if ($("macTableWrap").hidden === false) loadMacHosts();
+  } catch (e) { showMsg("editMacMsg", e.message, "err"); }
+});
+
 // ---- DHCP
 let selectedServer = "";
 const dhcpName = () => selectedServer;
@@ -931,7 +1035,7 @@ if ($("createUserForm")) $("createUserForm").onsubmit = e => {
 };
 
 // ---- Activity log (admins only)
-const CATEGORY_LABELS = { auth: "Sign-in", firewall: "Firewall", iphost: "IP hosts", dhcp: "DHCP", users: "Users", audit: "Activity log" };
+const CATEGORY_LABELS = { auth: "Sign-in", firewall: "Firewall", iphost: "IP hosts", machost: "MAC hosts", dhcp: "DHCP", users: "Users", audit: "Activity log" };
 
 function auditQuery() {
   // Dates are the viewer's local days, sent as exact UTC instants.
