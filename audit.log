@@ -203,3 +203,8 @@
 {"time": "2026-10-12T07:08:25+00:00", "user": "deep", "category": "auth", "action": "Login", "target": "deep", "details": "", "ok": true, "ip": "172.16.69.157", "firewall": ""}
 {"time": "2026-10-12T07:08:29+00:00", "user": "deep", "category": "firewall", "action": "Connect", "target": "https://172.16.64.49:4444", "details": "Firewall user: deepkumar.p", "ok": true, "ip": "172.16.69.157", "firewall": "dosepack"}
 {"time": "2026-10-12T07:09:21+00:00", "user": "deep", "category": "dhcp", "action": "Check binding", "target": "9C:C7:D3:89:9D:59", "details": "1 match(es): PLC_V5_POC: 9C:C7:D3:89:9D:59 → 172.29.22.196", "ok": true, "ip": "172.16.69.157", "firewall": "dosepack"}
+{"time": "2026-10-12T12:12:43+00:00", "user": "admin", "category": "auth", "action": "Login failed", "target": "admin", "details": "Wrong username or password", "ok": false, "ip": "172.16.69.157", "firewall": ""}
+{"time": "2026-10-12T12:12:47+00:00", "user": "admin", "category": "auth", "action": "Login", "target": "admin", "details": "", "ok": true, "ip": "172.16.69.157", "firewall": ""}
+{"time": "2026-10-12T12:12:56+00:00", "user": "admin", "category": "firewall", "action": "Connect", "target": "https://172.16.64.49:4444", "details": "Firewall user: deepkumar.p", "ok": true, "ip": "172.16.69.157", "firewall": "dosepack"}
+{"time": "2026-10-12T12:13:22+00:00", "user": "admin", "category": "machost", "action": "Add MACs to MAC host", "target": "PLC_V5_Basement-1", "details": "Added: 7C:B5:66:B3:65:46; [200] Configuration applied successfully.", "ok": true, "ip": "172.16.69.157", "firewall": "dosepack"}
+{"time": "2026-10-12T13:20:53+00:00", "user": "deep", "category": "auth", "action": "Login", "target": "deep", "details": "", "ok": true, "ip": "172.16.69.157", "firewall": ""}
