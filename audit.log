@@ -208,3 +208,4 @@
 {"time": "2026-10-12T12:12:56+00:00", "user": "admin", "category": "firewall", "action": "Connect", "target": "https://172.16.64.49:4444", "details": "Firewall user: deepkumar.p", "ok": true, "ip": "172.16.69.157", "firewall": "dosepack"}
 {"time": "2026-10-12T12:13:22+00:00", "user": "admin", "category": "machost", "action": "Add MACs to MAC host", "target": "PLC_V5_Basement-1", "details": "Added: 7C:B5:66:B3:65:46; [200] Configuration applied successfully.", "ok": true, "ip": "172.16.69.157", "firewall": "dosepack"}
 {"time": "2026-10-12T13:20:53+00:00", "user": "deep", "category": "auth", "action": "Login", "target": "deep", "details": "", "ok": true, "ip": "172.16.69.157", "firewall": ""}
+{"time": "2026-10-12T15:53:22+00:00", "user": "admin", "category": "auth", "action": "Login", "target": "admin", "details": "", "ok": true, "ip": "127.0.0.1", "firewall": ""}
