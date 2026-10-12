@@ -167,6 +167,19 @@
   <!-- DHCP -->
   <section id="dhcp">
     <div class="card">
+      <h2>Check MAC binding</h2>
+      <p class="sub">Check whether a MAC address is already bound to an IP on <strong>any</strong> DHCP server of this firewall. You can also enter part of a MAC (at least 4 hex digits) or an IP address.</p>
+      <form class="row" id="bindCheckForm" autocomplete="off">
+        <label>MAC or IP address <input id="bindQuery" required placeholder="AA:BB:CC:DD:EE:FF"></label>
+        <button class="btn" id="bindCheckBtn" type="submit">Check</button>
+      </form>
+      <div class="msg" id="bindMsg"></div>
+      <div class="table-wrap" id="bindWrap" hidden>
+        <table><thead><tr><th>DHCP server</th><th>Interface</th><th>Hostname</th><th>MAC address</th><th>IP address</th></tr></thead>
+        <tbody id="bindBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
       <h2>DHCP servers</h2>
       <p class="sub">Click Load to fetch all DHCP servers configured on the firewall, then click a server to see its details.</p>
       <div class="row">
@@ -198,8 +211,10 @@
           <label>Hostname <input id="leaseHost" required maxlength="63" placeholder="e.g. PRINTER-2F"></label>
           <label>MAC address <input id="leaseMac" required placeholder="AA:BB:CC:DD:EE:FF"></label>
           <label>IP address <input id="leaseIp" required placeholder="192.168.29.20"></label>
+          <button class="btn secondary" id="leaseCheckBtn" type="button">Check MAC</button>
           <button class="btn" id="addLeaseBtn" type="submit">Add lease</button>
         </form>
+        <div class="msg" id="leaseCheckMsg"></div>
         <div class="msg" id="addLeaseMsg"></div>
       </div>
     </div>
@@ -553,14 +568,9 @@ async function disconnectFirewall() {
 }
 $("disconnectBtn").onclick = () => busy($("disconnectBtn"), disconnectFirewall);
 
-// On page load: show the inventory; reconnect to the firewall this user used last time.
-(async () => {
-  const d = await loadFirewalls();
-  if (d && !d.current && d.last_used) {
-    const last = fwList.find(f => f.id === d.last_used);
-    if (last) { $("connText").textContent = `Connecting to ${last.name}…`; await connectFirewall(last); }
-  }
-})();
+// On page load: show the inventory. A page refresh keeps the connection (it lives in the
+// login session); after logout or idle timeout the session is gone, so nothing reconnects.
+loadFirewalls();
 
 let fwSearchTimer;
 $("fwSearch").oninput = () => { clearTimeout(fwSearchTimer); fwSearchTimer = setTimeout(renderFirewalls, 120); };
@@ -841,7 +851,7 @@ function selectServer(name) {
   selectedServer = name;
   document.querySelectorAll("#serverBody tr").forEach(tr => tr.style.background = tr.dataset.name === name ? "var(--accent-soft)" : "");
   $("dhcpTitle").textContent = name; $("csvTarget").textContent = name;
-  $("applyBtn").disabled = true; $("previewWrap").hidden = true; hideMsg("csvMsg"); hideMsg("addLeaseMsg"); $("addLeaseForm").reset();
+  $("applyBtn").disabled = true; $("previewWrap").hidden = true; hideMsg("csvMsg"); hideMsg("addLeaseMsg"); hideMsg("leaseCheckMsg"); $("addLeaseForm").reset();
   $("dhcpDetailCard").hidden = false;
   loadDhcp().then(() => $("dhcpDetailCard").scrollIntoView({ behavior: "smooth", block: "start" }));
 }
@@ -861,6 +871,9 @@ async function loadDhcp() {
     }));
     const body = $("leaseBody"); body.replaceChildren();
     if (!s.leases.length) { const tr = document.createElement("tr"); cell(tr, "No static leases.", "empty").colSpan = 4; body.appendChild(tr); }
+    // Sort by IP address numerically (192.168.1.9 before 192.168.1.10); invalid IPs go last.
+    const ipKey = ip => /^\d+\.\d+\.\d+\.\d+$/.test(ip) ? ip.split(".").reduce((n, o) => n * 256 + Number(o), 0) : Infinity;
+    s.leases.sort((a, b) => ipKey(a.IpAdd) - ipKey(b.IpAdd));
     s.leases.forEach((l, i) => { const tr = document.createElement("tr"); cell(tr, i + 1); cell(tr, l.HName); cell(tr, l.MAC_Add, "mono"); cell(tr, l.IpAdd, "mono"); body.appendChild(tr); });
     $("dhcpInfo").hidden = false;
     $("addLeaseHint").textContent = `Bind a MAC address to an IP in ${s.params.Gateway || "the interface"} / ${s.params.SubnetMask}` +
@@ -871,15 +884,61 @@ async function loadDhcp() {
 }
 $("dhcpLoadBtn").onclick = () => busy($("dhcpLoadBtn"), loadServers);
 
+// ---- MAC binding check (searches every DHCP server's static leases)
+const lookupBinding = q => api(`/api/dhcp-lookup?q=${encodeURIComponent(q)}`);
+const bindingText = m => `${m.server} (${m.interface}): ${m.HName || "no hostname"} ${m.MAC_Add} → ${m.IpAdd}`;
+
+$("bindCheckForm").onsubmit = e => {
+  e.preventDefault();
+  busy($("bindCheckBtn"), async () => {
+    hideMsg("bindMsg"); $("bindWrap").hidden = true;
+    try {
+      const d = await lookupBinding($("bindQuery").value.trim());
+      const label = d.kind === "ip" ? `IP ${d.query}` : d.kind === "mac" ? `MAC ${d.query}` : `MACs containing "${d.query}"`;
+      if (!d.matches.length) return showMsg("bindMsg", `${label}: not bound on any DHCP server. It is free to use.`, "ok");
+      showMsg("bindMsg", `${label}: found ${d.matches.length} static lease(s).`, "err");
+      const body = $("bindBody"); body.replaceChildren();
+      d.matches.forEach(m => {
+        const tr = document.createElement("tr"); tr.className = "clickable";
+        cell(tr, m.server).style.fontWeight = 600; cell(tr, m.interface); cell(tr, m.HName);
+        cell(tr, m.MAC_Add, "mono"); cell(tr, m.IpAdd, "mono");
+        tr.onclick = () => selectServer(m.server);
+        body.appendChild(tr);
+      });
+      $("bindWrap").hidden = false;
+    } catch (err) { showMsg("bindMsg", err.message, "err"); }
+  });
+};
+
+// Checks the MAC typed in the add-lease form. Returns the matches, or null if the check failed.
+async function checkLeaseMac() {
+  hideMsg("leaseCheckMsg");
+  const mac = $("leaseMac").value.trim();
+  if (!mac) { showMsg("leaseCheckMsg", "Enter a MAC address first.", "err"); return null; }
+  try {
+    const d = await lookupBinding(mac);
+    if (d.kind !== "mac") { showMsg("leaseCheckMsg", "Enter a full MAC address (e.g. AA:BB:CC:DD:EE:FF).", "err"); return null; }
+    if (!d.matches.length) showMsg("leaseCheckMsg", `${d.query} is not bound on any DHCP server.`, "ok");
+    else showMsg("leaseCheckMsg", `${d.query} is already bound: ${d.matches.map(bindingText).join("; ")}`, "err");
+    return d.matches;
+  } catch (err) { showMsg("leaseCheckMsg", err.message, "err"); return null; }
+}
+$("leaseCheckBtn").onclick = () => busy($("leaseCheckBtn"), checkLeaseMac);
+
 // Manual single static lease
 $("addLeaseForm").onsubmit = e => {
   e.preventDefault();
   const body = { hostname: $("leaseHost").value.trim(), mac: $("leaseMac").value.trim(), ip: $("leaseIp").value.trim() };
-  if (!confirm(`Add static lease on "${dhcpName()}"?\n\n${body.hostname}\n${body.mac} → ${body.ip}`)) return;
   busy($("addLeaseBtn"), async () => {
+    // Always verify the MAC across all DHCP servers before adding.
+    const matches = await checkLeaseMac();
+    if (matches === null) return;
+    let question = `Add static lease on "${dhcpName()}"?\n\n${body.hostname}\n${body.mac} → ${body.ip}`;
+    if (matches.length) question = `WARNING: this MAC is already bound:\n${matches.map(bindingText).join("\n")}\n\n` + question;
+    if (!confirm(question)) return;
     try {
       const d = await jsonPost(`/api/dhcp/${encodeURIComponent(dhcpName())}/add`, body);
-      showMsg("addLeaseMsg", d.message, "ok"); $("addLeaseForm").reset(); await loadDhcp(); loadServers();
+      hideMsg("leaseCheckMsg"); showMsg("addLeaseMsg", d.message, "ok"); $("addLeaseForm").reset(); await loadDhcp(); loadServers();
     } catch (err) { showMsg("addLeaseMsg", err.message, "err"); }
   });
 };

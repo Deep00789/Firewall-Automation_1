@@ -2,10 +2,15 @@
   "admin": {
     "hash": "scrypt:32768:8:1$ghlRnjLXkHeMWvVB$fe22d637321e1db003880c9243e80aaaeafd018e985446cb8e6ecf3bd09b5d83375c5372c113b6f1df77989f7ad9c56afeb6778fbc9ffc7d8d71842981b0c709",
     "role": "admin",
-    "last_firewall": "a744de50989f"
+    "last_firewall": "9242343dd63a"
   },
   "deep": {
     "hash": "scrypt:32768:8:1$Yooioz7aHRC5TIEQ$236f5d202c8e017643d2cb3ba56b1256609e88be676307a676302bd8e4240e49d302ec8785e62a012a5a64d31101931c03da9d605cbb9033f927a6b7e2b5ef7b",
+    "role": "admin",
+    "last_firewall": "9242343dd63a"
+  },
+  "manojk": {
+    "hash": "scrypt:32768:8:1$0s6LSnjzxjIcEOQW$4fee000399d2be57b059772faf541bb56b664f9c68ca33ad6f4b0eefdca671af95c255d5e27ebfc27c188e01fbd696bae14e9c9a1337da5584cadc063cda5252",
     "role": "admin"
   }
 }

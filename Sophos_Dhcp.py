@@ -58,6 +58,41 @@ def get_existing_leases(DSerName):
     raise sophoslogin.SophosError(f"DHCP server '{DSerName}' not found.")
 
 
+def find_bindings(query):
+    """Search the static leases of ALL DHCP servers for a MAC (full or partial) or an IP.
+
+    Returns {"kind": "mac" | "mac-partial" | "ip", "query": normalized, "matches": [...]}.
+    """
+    query = (query or "").strip()
+    try:
+        ip = str(ipaddress.IPv4Address(query))
+        kind, key = "ip", ip
+    except ValueError:
+        digits = re.sub(r"[^0-9A-Fa-f]", "", query).upper()
+        if len(digits) == 12 and re.fullmatch(r"[0-9A-Fa-f:.\- ]+", query):
+            kind, key = "mac", ":".join(digits[i:i + 2] for i in range(0, 12, 2))
+        elif len(digits) >= 4 and re.fullmatch(r"[0-9A-Fa-f:.\- ]+", query):
+            kind, key = "mac-partial", digits
+        else:
+            raise ValueError("Enter a MAC address (full, or at least 4 hex digits) or an IP address.")
+
+    matches = []
+    for server in get_dhcp_servers():
+        for lease in server["leases"]:
+            lease_digits = re.sub(r"[^0-9A-F]", "", lease["MAC_Add"].upper())
+            if (kind == "ip" and lease["IpAdd"] == key) or \
+               (kind == "mac" and lease_digits == key.replace(":", "")) or \
+               (kind == "mac-partial" and key in lease_digits):
+                matches.append({
+                    "server": server["name"],
+                    "interface": server["params"]["Interface"],
+                    "HName": lease["HName"],
+                    "MAC_Add": lease["MAC_Add"],
+                    "IpAdd": lease["IpAdd"],
+                })
+    return {"kind": kind, "query": key, "matches": matches}
+
+
 def _in_dynamic_range(ip, dynamic_ranges):
     for ip_range in dynamic_ranges:
         start, _, end = ip_range.partition("-")

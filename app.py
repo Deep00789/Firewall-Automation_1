@@ -133,8 +133,14 @@ def login():
 @app.post("/logout")
 def logout():
     if session.get("user"):
+        if session.get("fw_id"):
+            try:
+                fw = firewalls.get(session["fw_id"])
+                record("firewall", "Disconnect (logout)", fw["url"], firewall=fw["name"])
+            except ValueError:
+                pass
         record("auth", "Logout", session["user"])
-    session.clear()
+    session.clear()  # also drops the firewall connection (fw_id)
     return redirect(url_for("login"))
 
 
@@ -390,6 +396,19 @@ def add_macs():
 @app.get("/api/dhcp")
 def list_dhcp():
     return jsonify({"ok": True, "servers": Sophos_Dhcp.get_dhcp_servers()})
+
+
+@app.get("/api/dhcp-lookup")
+def lookup_binding():
+    """Is this MAC (or IP) already bound to a static lease on any DHCP server?"""
+    q = request.args.get("q", "").strip()
+    try:
+        result = Sophos_Dhcp.find_bindings(q)
+    except ValueError as e:
+        return jsonify({"ok": False, "message": str(e)}), 400
+    found = "; ".join(f"{m['server']}: {m['MAC_Add']} → {m['IpAdd']}" for m in result["matches"]) or "not bound"
+    record("dhcp", "Check binding", q, f"{len(result['matches'])} match(es): {found}")
+    return jsonify({"ok": True, **result})
 
 
 @app.get("/api/dhcp/<name>")
