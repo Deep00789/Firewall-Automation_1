@@ -1,5 +1,5 @@
 # Sophos Firewall Automation Portal
-FROM python:3.13-slim
+FROM python:3.13-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
