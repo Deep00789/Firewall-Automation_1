@@ -7,6 +7,15 @@ firewallautomation/
 venv/
 .venv/
 
+# Runtime data (credentials, keys, history)
+data/
+users.json
+firewalls.json
+firewalls.json.*
+firewall_credentials.json
+audit.log
+.secret_key
+
 # Secrets and temporary files
 .env
 *.key

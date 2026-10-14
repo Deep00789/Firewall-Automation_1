@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment (Windows venv; Docker installs from requirements.txt)
+firewallautomation/
+venv/
+.venv/
+
+# Secrets and temporary files
+.env
+*.key
+*.tmp
+*.dpapi-backup-*

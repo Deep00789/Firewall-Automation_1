@@ -9,8 +9,9 @@ import os
 import threading
 from datetime import datetime, timezone
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(BASE_DIR, "audit.log")
+import config
+
+LOG_FILE = config.data_path("audit.log")
 CATEGORIES = ("auth", "firewall", "iphost", "machost", "dhcp", "users", "audit")
 _lock = threading.Lock()
 

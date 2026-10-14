@@ -1,0 +1,17 @@
+# Not needed inside the Docker image
+.git/
+.gitignore
+.dockerignore
+.claude/
+.vscode/
+__pycache__/
+*.pyc
+firewallautomation/
+venv/
+.venv/
+
+# Secrets: pass FIREWALL_KEY at run time, never bake it into the image
+.env
+*.key
+*.tmp
+*.dpapi-backup-*

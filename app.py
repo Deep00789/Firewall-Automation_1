@@ -1,6 +1,10 @@
 """Web GUI for the Sophos firewall automation scripts.
 
-Run:  firewallautomation\\Scripts\\python.exe app.py   then open http://127.0.0.1:5000
+Development (Windows or Linux):   python app.py        then open http://127.0.0.1:5555
+Production (Linux / Docker):      gunicorn -c gunicorn.conf.py app:app
+
+Settings (environment variables): HOST, PORT, DATA_DIR, FLASK_SECRET_KEY, FIREWALL_KEY,
+SESSION_COOKIE_SECURE, TRUST_PROXY. See README.md.
 """
 import os
 import secrets
@@ -8,10 +12,12 @@ from contextlib import contextmanager
 from datetime import timedelta
 from functools import wraps
 
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask import Flask, Response, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 import audit
 import auth
+import config
 import firewalls
 import IPHost
 import MACHost
@@ -19,6 +25,9 @@ import Sophos_Dhcp
 import Sophos_Login_And_Sendrequest as sophoslogin
 
 app = Flask(__name__)
+if config.env_bool("TRUST_PROXY"):
+    # Behind nginx/Traefik etc.: take the client IP and https scheme from X-Forwarded-* headers.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 firewalls.migrate_legacy()
 
 # Routes that talk to the firewall the user is connected to (session["fw_id"]).
@@ -54,10 +63,14 @@ def _secret_key():
     """Use FLASK_SECRET_KEY, else a random key kept in .secret_key so sessions survive restarts."""
     if os.environ.get("FLASK_SECRET_KEY"):
         return os.environ["FLASK_SECRET_KEY"]
-    path = os.path.join(auth.BASE_DIR, ".secret_key")
+    path = config.data_path(".secret_key")
     if not os.path.exists(path):
-        with open(path, "w") as f:
-            f.write(secrets.token_hex(32))
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(secrets.token_hex(32))
+        except FileExistsError:
+            pass  # created at the same moment by another worker
     with open(path) as f:
         return f.read().strip()
 
@@ -66,6 +79,7 @@ app.config.update(
     SECRET_KEY=_secret_key(),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Strict",
+    SESSION_COOKIE_SECURE=config.env_bool("SESSION_COOKIE_SECURE"),  # set true when served over HTTPS
     PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),  # idle timeout
 )
 
@@ -464,5 +478,7 @@ def export_leases(name):
 
 
 if __name__ == "__main__":
-    # Bound to localhost only: this app holds firewall admin credentials.
-    app.run(host="0.0.0.0", port=5555, debug=False)
+    # Flask's built-in server, for development / small Windows setups.
+    # Default: this computer only. Set HOST=0.0.0.0 to allow other machines (use HTTPS in front).
+    # On a Linux server use gunicorn instead (see gunicorn.conf.py / Dockerfile).
+    app.run(host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "5555")), debug=False)

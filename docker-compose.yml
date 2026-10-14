@@ -1,0 +1,13 @@
+services:
+  firewall-portal:
+    build: .
+    image: firewall-portal:latest
+    container_name: firewall-portal
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+    ports:
+      - "5555:5555"          # use "127.0.0.1:5555:5555" if a reverse proxy on this VM serves HTTPS
+    volumes:
+      - ./data:/data         # users.json, firewalls.json, audit.log, keys - back this folder up

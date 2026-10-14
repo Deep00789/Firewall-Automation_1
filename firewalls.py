@@ -1,6 +1,6 @@
 """Firewall inventory: the list of Sophos firewalls this portal can connect to.
 
-Stored in firewalls.json. Passwords are encrypted with Windows DPAPI (credential_store).
+Stored in <DATA_DIR>/firewalls.json. Passwords are encrypted with Fernet (credential_store).
 """
 import csv
 import io
@@ -12,11 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+import config
 import credential_store
 import Sophos_Login_And_Sendrequest as sophoslogin
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FIREWALLS_FILE = os.path.join(BASE_DIR, "firewalls.json")
+FIREWALLS_FILE = config.data_path("firewalls.json")
 CSV_COLUMNS = ["Name", "URL", "Username", "Password", "Site", "Notes"]
 CHECK_TIMEOUT = 8  # seconds per firewall for status checks
 _lock = threading.Lock()
@@ -95,8 +95,8 @@ def get(fw_id, with_password=False):
                 return _public(f)
             try:
                 password = credential_store.decrypt(f["password"])
-            except OSError:
-                raise ValueError(f"Cannot decrypt the password of '{f['name']}' (saved by another Windows user?). Edit it and re-enter the password.")
+            except OSError as e:
+                raise ValueError(f"Cannot decrypt the password of '{f['name']}': {e} Edit the firewall and re-enter the password.")
             return _public(f) | {"password": password}
     raise ValueError("Firewall not found. It may have been deleted.")
 

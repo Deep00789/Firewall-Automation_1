@@ -10,8 +10,10 @@ import time
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-USERS_FILE = os.path.join(BASE_DIR, "users.json")
+import config
+
+BASE_DIR = config.BASE_DIR
+USERS_FILE = config.data_path("users.json")
 
 ROLES = ("admin", "user")
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
@@ -32,8 +34,10 @@ def load_users():
 
 
 def save_users(users):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
+    tmp = USERS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(users, f, indent=2)
+    os.replace(tmp, USERS_FILE)
 
 
 def get_user(username):

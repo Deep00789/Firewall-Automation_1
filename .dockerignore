@@ -9,6 +9,16 @@ __pycache__/
 firewallautomation/
 venv/
 .venv/
+_original_backup/
+
+# Runtime data lives in the /data volume, never in the image
+data/
+users.json
+firewalls.json
+firewalls.json.*
+firewall_credentials.json
+audit.log
+.secret_key
 
 # Secrets: pass FIREWALL_KEY at run time, never bake it into the image
 .env
