@@ -35,10 +35,7 @@ def _load():
 
 
 def _save(items):
-    tmp = FIREWALLS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(items, f, indent=2)
-    os.replace(tmp, FIREWALLS_FILE)
+    config.write_json(FIREWALLS_FILE, items)
 
 
 def _public(fw):
