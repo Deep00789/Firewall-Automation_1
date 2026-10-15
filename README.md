@@ -40,8 +40,8 @@ It runs on **Linux** (bare-metal, VM or **Docker**) and on **Windows**.
 |---|---|
 | **OS** | Linux (e.g. Ubuntu 22.04 / 24.04, or any distro that runs Docker) or Windows. |
 | **Docker** (optional) | Docker Engine 24+ with the Compose plugin (`docker compose`). |
-| **Python** | 3.10+ when running without Docker (the Docker image uses Python 3.13). |
-| **Python packages** | Listed in `requirements.txt`: Flask, requests, cryptography, gunicorn (Linux only). |
+| **Python** | 3.10+ when running without Docker. |
+| **Python packages** | Listed in `requirements.txt`: Flask, requests, cryptography, gunicorn (Linux only). The Docker image uses Python 3.12. |
 | **Sophos firewall** | API access enabled: *Backup & firmware → API → API configuration* → enable, and add the portal machine's IP to the **Allowed IP addresses**. An admin account with rights to edit hosts and DHCP. |
 | **Network** | The portal host must reach each firewall's web admin port (usually `https://<ip>:4444`). |
 
@@ -65,10 +65,10 @@ FirewallAutomation/
 ├── Sophos_Dhcp.py                  # DHCP servers, static lease validation/import/export
 ├── sophos_firewall_api.py          # Stand-alone REST (v2) client example (not used by the portal)
 ├── requirements.txt                # Python dependencies
-├── Dockerfile                      # Container image (gunicorn, non-root user, /data volume)
-├── docker-compose.yml              # One-command deployment with the ./data volume
-├── gunicorn.conf.py                # Production web server settings
-├── .env.example                    # Template for secrets/settings -> copy to .env
+├── Dockerfile                      # Builds the container image
+├── docker-compose.yml              # Starts the container, keeps data in ./data
+├── gunicorn.conf.py                # Optional production web server settings
+├── .env.example                    # Optional: list of settings (for Linux without Docker)
 ├── templates/
 │   ├── index.html                  # Main single-page UI
 │   └── login.html                  # Login page
@@ -81,7 +81,7 @@ FirewallAutomation/
 
 ### Files created at runtime (do **not** commit)
 
-They are written to the **data folder** (`DATA_DIR`): `/data` in Docker (the `./data` folder next to `docker-compose.yml`), or the project folder if `DATA_DIR` is not set.
+They are written to the **data folder** (`DATA_DIR`): the `./data` folder next to `docker-compose.yml` in Docker, or the project folder if `DATA_DIR` is not set.
 
 | File | Contents |
 |---|---|
@@ -119,49 +119,46 @@ After the first admin exists, further users can be managed from the **User Manag
 
 ### Option A – Docker on a Linux server (recommended)
 
+The Docker setup is two small files: `Dockerfile` and `docker-compose.yml`. All app data is kept in one folder, `./data`, next to them.
+
 ```bash
 # 1. Install Docker (Ubuntu) – skip if already installed
 curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER      # log out and back in afterwards
 
-# 2. Go to the project folder and create the settings file
+# 2. Go to the project folder and create the data folder
 cd FirewallAutomation
-cp .env.example .env
+mkdir -p data
 
-# 3. Generate the two secrets and put them in .env
-docker run --rm python:3.13-slim sh -c "pip -q install cryptography && python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
-#    -> paste as FIREWALL_KEY=...
-openssl rand -hex 32
-#    -> paste as FLASK_SECRET_KEY=...
-nano .env
-
-# 4. Create the data folder, owned by the container user (UID 1000)
-mkdir -p data && sudo chown -R 1000:1000 data
-
-# 5. Build and start
+# 3. Build and start
 docker compose up -d --build
 
-# 6. Create the first admin (prompts for a password)
-docker compose exec firewall-portal python manage_users.py add admin admin
+# 4. Create the first admin (asks for a password)
+docker compose exec firewall-automation python manage_users.py add admin admin
 ```
 
 Open **http://\<server-ip\>:5555**.
 
+On first start the app creates two key files in `./data`:
+
+- `.firewall.key` – encrypts the firewall passwords. **Back it up.** If it is lost, every firewall password must be entered again.
+- `.secret_key` – signs login sessions.
+
 Everyday commands:
 
 ```bash
-docker compose logs -f                # view logs
-docker compose restart                # restart
-docker compose down                   # stop
-git pull && docker compose up -d --build   # update to a new version (data is kept in ./data)
-docker compose exec firewall-portal python manage_users.py list
+docker compose logs -f              # view logs
+docker compose restart              # restart
+docker compose down                 # stop
+docker compose up -d --build        # rebuild after changing code (data in ./data is kept)
+docker compose exec firewall-automation python manage_users.py list
 ```
 
 Notes:
 
-- The container runs **gunicorn** with 1 worker × 8 threads (see `gunicorn.conf.py`). Keep it at one worker: lockouts and firewall status are held in memory.
 - The container talks to the firewalls from the **VM's IP address**. Add that IP to each firewall's API *Allowed IP addresses*, and make sure the VM can reach the firewalls on port 4444.
 - Users reach the portal over **plain HTTP** on port 5555. For anything beyond a trusted management network, put a reverse proxy with HTTPS in front (see [HTTPS with a reverse proxy](#https-with-a-reverse-proxy)).
+- The container uses Flask's built-in server (`python app.py`), which is fine for a small team. For heavier use, change the last line of the `Dockerfile` to `CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]`.
+- Optional settings (like `FIREWALL_KEY` instead of the key file) can be added under `environment:` in `docker-compose.yml`. See [Configuration](#configuration).
 
 ### Option B – Linux without Docker
 
@@ -227,15 +224,19 @@ Older versions encrypted firewall passwords with **Windows DPAPI**, which Linux 
 cd FirewallAutomation
 .\firewallautomation\Scripts\Activate.ps1
 pip install -r requirements.txt
-$env:FIREWALL_KEY = "<the same key you put in the server's .env>"
 python migrate_credentials.py
 ```
 
-It writes a backup (`firewalls.json.dpapi-backup-<date>`) and re-encrypts every password with the key. Then copy these files into the server's `data/` folder and fix ownership:
+This re-encrypts every firewall password with a new key, saved as `.firewall.key` in the project folder, and keeps a backup of the old file (`firewalls.json.dpapi-backup-<date>`).
+
+Then copy these 4 files from the Windows project folder into the `data/` folder on the server, and restart:
+
+```
+users.json   firewalls.json   audit.log   .firewall.key
+```
 
 ```bash
-# files: users.json  firewalls.json  audit.log
-sudo chown -R 1000:1000 data && docker compose restart
+docker compose restart
 ```
 
 If you skip the conversion, the portal still starts on Linux, but each firewall shows *"encrypted with Windows DPAPI and cannot be read"*. Edit each firewall and re-enter its password to fix it.
@@ -250,11 +251,11 @@ fwportal.example.com {
 }
 ```
 
-Then in `docker-compose.yml` change the port to `"127.0.0.1:5555:5555"`, and in `.env` set:
+Then in `docker-compose.yml` change the port to `"127.0.0.1:5555:5555"` and add under `environment:`:
 
-```
-SESSION_COOKIE_SECURE=true
-TRUST_PROXY=true
+```yaml
+      - SESSION_COOKIE_SECURE=true
+      - TRUST_PROXY=true
 ```
 
 ---
@@ -333,7 +334,7 @@ DEVICE08,C8:32:AF:DE:44:18,192.168.29.154
 
 ## Command-line usage
 
-The modules can also be run directly against a single firewall configured by environment variables (see [Configuration](#configuration)). In Docker, prefix commands with `docker compose exec firewall-portal`.
+The modules can also be run directly against a single firewall configured by environment variables (see [Configuration](#configuration)). In Docker, prefix commands with `docker compose exec firewall-automation`.
 
 ```bash
 export SOPHOS_URL="https://192.168.1.1:4444"     # PowerShell: $env:SOPHOS_URL = "..."
@@ -365,7 +366,7 @@ python IPHost.py
 
 | Variable | Used by | Default | Purpose |
 |---|---|---|---|
-| `DATA_DIR` | all | project folder (`/data` in Docker) | Where users, firewalls, audit log and keys are stored |
+| `DATA_DIR` | all | project folder (`/app/data` in Docker) | Where users, firewalls, audit log and keys are stored |
 | `FIREWALL_KEY` | `credential_store.py` | random key saved to `<DATA_DIR>/.firewall.key` | Fernet key that encrypts firewall passwords. **Back it up.** |
 | `FLASK_SECRET_KEY` | `app.py` | random key saved to `<DATA_DIR>/.secret_key` | Signs session cookies |
 | `HOST` | `app.py`, gunicorn | `127.0.0.1` (`python app.py`), `0.0.0.0` (gunicorn/Docker) | Address to listen on |
@@ -391,13 +392,13 @@ Other settings in code:
 
 ## Security notes
 
-- **Firewall passwords** are encrypted with Fernet (AES + HMAC) using `FIREWALL_KEY`. Anyone with the key and `firewalls.json` can decrypt them, so keep `.env` / `.firewall.key` readable only by the service account, and store a copy of the key somewhere safe (password manager).
+- **Firewall passwords** are encrypted with Fernet (AES + HMAC) using the key in `.firewall.key` (or `FIREWALL_KEY` if set). Anyone with the key and `firewalls.json` can decrypt them, so keep `.env` / `.firewall.key` readable only by the service account, and store a copy of the key somewhere safe (password manager).
 - **Portal passwords** are stored as Werkzeug hashes, never in plain text.
 - Sessions use `HttpOnly` + `SameSite=Strict` cookies, a 30-minute idle timeout, and are invalidated when the password changes.
 - Login timing is equalized for unknown users, and repeated failures trigger a temporary lockout.
 - Every login, change and failure is written to `audit.log`; the app never edits or deletes entries.
 - **TLS verification is off by default** because most firewalls use self-signed certificates. Turn on `SOPHOS_VERIFY_SSL=true` if your firewalls have trusted certificates.
-- The Docker image runs as a **non-root user** and keeps all data in the `/data` volume; no secrets are baked into the image.
+- All data and keys stay in the `./data` folder; no secrets are copied into the Docker image (see `.dockerignore`). Keep that folder readable only by admins on the VM (`chmod 700 data`).
 - The portal speaks **plain HTTP**. Keep it on a trusted management network, or put it behind an HTTPS reverse proxy and set `SESSION_COOKIE_SECURE=true`.
 - Never commit `.env`, `data/`, `users.json`, `firewalls.json`, `firewall_credentials.json`, `.secret_key`, `.firewall.key` or `audit.log`.
 
@@ -480,7 +481,6 @@ Endpoints marked 🔌 need a connected firewall; 🔒 are admin-only.
 | `Login failed: …` | Wrong firewall credentials, **API not enabled**, or the portal machine's IP is not in the firewall's API allowed list. |
 | `… encrypted with Windows DPAPI and cannot be read on this system` | Old Windows data copied to Linux. Run `migrate_credentials.py` on the Windows PC, or edit the firewall and re-enter its password. |
 | `… encrypted with a different key (check FIREWALL_KEY)` | `FIREWALL_KEY` changed or `.firewall.key` was lost. Restore the original key, or re-enter the passwords. |
-| `PermissionError: … /data/…` in `docker compose logs` | The `data` folder is not writable by UID 1000: `sudo chown -R 1000:1000 data`. |
 | Portal not reachable from other PCs | Docker: check `ports:` in `docker-compose.yml` and the VM firewall (`sudo ufw allow 5555/tcp`). Windows: set `HOST=0.0.0.0`. |
 | `No firewall connected` | Connect to a firewall on the **Firewalls** tab first. |
 | `Session expired` | 30 minutes idle, or your password was changed/reset. Log in again. |

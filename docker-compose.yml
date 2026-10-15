@@ -1,13 +1,28 @@
 services:
-  firewall-portal:
-    build: .
-    image: firewall-portal:latest
-    container_name: firewall-portal
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      DATA_DIR: /data
+  firewall-automation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: my-automation-app
+    container_name: firewall_automation_container
+
     ports:
-      - "5555:5555"          # use "127.0.0.1:5555:5555" if a reverse proxy on this VM serves HTTPS
+      - "5555:5555"
+
+    environment:
+      # Listen on all addresses inside the container (needed for Docker)
+      - HOST=0.0.0.0
+      - PORT=5555
+
+      # All app data is saved in /app/data (see "volumes" below)
+      - DATA_DIR=/app/data
+
     volumes:
-      - ./data:/data         # users.json, firewalls.json, audit.log, keys - back this folder up
+      # One folder for all app data:
+      #   users.json, firewalls.json, audit.log,
+      #   .firewall.key (encrypts firewall passwords), .secret_key
+      # Back up this folder!
+      - ./data:/app/data:rw
+
+    restart: unless-stopped

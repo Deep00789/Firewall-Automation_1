@@ -34,10 +34,7 @@ def load_users():
 
 
 def save_users(users):
-    tmp = USERS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2)
-    os.replace(tmp, USERS_FILE)
+    config.write_json(USERS_FILE, users)
 
 
 def get_user(username):
