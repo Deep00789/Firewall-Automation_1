@@ -30,7 +30,8 @@ It runs on **Linux** (bare-metal, VM or **Docker**) and on **Windows**.
 9. [Configuration](#configuration)
 10. [Security notes](#security-notes)
 11. [API reference](#api-reference)
-12. [Troubleshooting](#troubleshooting)
+12. [Changelog](#changelog)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -75,7 +76,10 @@ FirewallAutomation/
 ├── static/                         # CSS, logos, favicons
 ├── datasheet.csv                   # Sample input for CLI static-lease import
 ├── leasesheet.csv                  # Output of CLI static-lease export
+├── attendance.json                 # Sample data (not used by the portal)
+├── .claude/launch.json             # Editor launch configuration
 ├── _original_backup/               # Earlier versions of the scripts (reference only)
+├── _backup_before_linux/           # Windows-only versions before the Linux/Docker port (reference only)
 └── firewallautomation/             # Local Python virtual environment (not committed)
 ```
 
@@ -398,6 +402,7 @@ Other settings in code:
 - Login timing is equalized for unknown users, and repeated failures trigger a temporary lockout.
 - Every login, change and failure is written to `audit.log`; the app never edits or deletes entries.
 - **TLS verification is off by default** because most firewalls use self-signed certificates. Turn on `SOPHOS_VERIFY_SSL=true` if your firewalls have trusted certificates.
+- **Runtime files are not tracked in git.** Before 2026-10-15, `.secret_key`, `users.json`, `firewalls.json`, `firewall_credentials.json` and `audit.log` were committed by mistake. They have been removed from the index, but they **remain in the git history**. If this repository was ever pushed or shared, rotate the Flask secret key and change the firewall and portal passwords.
 - All data and keys stay in the `./data` folder; no secrets are copied into the Docker image (see `.dockerignore`). Keep that folder readable only by admins on the VM (`chmod 700 data`).
 - The portal speaks **plain HTTP**. Keep it on a trusted management network, or put it behind an HTTPS reverse proxy and set `SESSION_COOKIE_SECURE=true`.
 - Never commit `.env`, `data/`, `users.json`, `firewalls.json`, `firewall_credentials.json`, `.secret_key`, `.firewall.key` or `audit.log`.
@@ -469,6 +474,41 @@ Endpoints marked 🔌 need a connected firewall; 🔒 are admin-only.
 | POST | `/api/dhcp/<name>/apply` | `{"rows": [...]}` – add validated leases |
 | POST | `/api/dhcp/<name>/add` | `{"hostname", "mac", "ip"}` – add one lease |
 | GET | `/api/dhcp/<name>/export` | Static leases as CSV |
+
+---
+
+## Changelog
+
+Built from the git history (`git log`), newest first.
+
+### 2026-10-15
+- Verified the portal runs correctly on an Ubuntu host.
+- Repository cleanup: stopped tracking runtime and secret files (`.secret_key`, `users.json`, `firewalls.json`, `firewall_credentials.json`, `audit.log`) and compiled `__pycache__/*.pyc` files. Removed a stray empty template file and an accidental self-referencing `Firewall-Automation_1` submodule entry.
+- README: added this changelog, updated the project structure and expanded the security notes.
+
+### 2026-10-14 – Linux / Docker support
+- Added `config.py` with `DATA_DIR`, so all runtime data lives in one folder (`./data` in Docker).
+- `credential_store.py` now encrypts firewall passwords with **Fernet** (`FIREWALL_KEY` / `.firewall.key`) instead of Windows DPAPI.
+- Added `migrate_credentials.py`, a one-time conversion from DPAPI to Fernet.
+- Added `Dockerfile`, `docker-compose.yml`, `gunicorn.conf.py`, `.env.example`, `.gitignore` and `.dockerignore`.
+- Pinned dependencies in `requirements.txt` and converted the file to plain UTF-8.
+- Kept the pre-port versions in `_backup_before_linux/`.
+- Rewrote the README for Linux, Docker and Windows deployment.
+
+### 2026-10-13
+- Added `sophos_firewall_api.py`, a stand-alone REST (v2) client example.
+
+### 2026-10-07 – 2026-10-12
+- DHCP improvements in `Sophos_Dhcp.py`, `app.py` and `templates/index.html`, including the MAC/IP binding lookup across all DHCP servers.
+- Firewall inventory updates.
+
+### 2026-09-29
+- Audit logging of user actions.
+- Stronger portal password rules: at least 8 characters, with an uppercase letter, a digit and a special character (`auth.py`).
+
+### 2026-09-28
+- Firewall selection dropdown to connect a session to a specific firewall.
+- **MAC host** support: `MACHost.py`, the `/api/machosts` endpoints and a MAC Hosts tab in the UI.
 
 ---
 
