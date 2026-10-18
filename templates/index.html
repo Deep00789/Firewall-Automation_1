@@ -301,8 +301,9 @@
   <section id="portfwd">
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center">
-        <div><h2>Port forwards</h2><p class="sub" style="margin:0" id="pfSummary">Documentation of port-forwarding rules. Nothing here is pushed to a firewall.</p></div>
+        <div><h2>Documents · Firewall rule: port forwarding</h2><p class="sub" style="margin:0" id="pfSummary">Manual documentation of port-forwarding rules. Nothing here is pushed to a firewall.</p></div>
         <div class="row" style="flex:none">
+          <button class="btn danger-outline admin-only" id="pfDeleteSelBtn" hidden>Delete selected</button>
           <a class="btn secondary" href="/api/portforwards/export" id="pfExportBtn">Export CSV</a>
           <button class="btn secondary" id="pfImportBtn">Import CSV</button>
           <button class="btn" id="pfAddBtn">Add port forward</button>
@@ -318,7 +319,7 @@
       </div>
       <div class="msg" id="pfMsg"></div>
       <div class="table-wrap">
-        <table><thead><tr><th>Rule No</th><th>Port</th><th>Public IP</th><th>Private IP</th><th>External port</th><th>Internal port</th><th>Requestor</th><th>Sites</th><th>Description</th><th style="text-align:right">Actions</th></tr></thead>
+        <table><thead><tr>{% if role == 'admin' %}<th style="width:28px"><input type="checkbox" id="pfSelAll" title="Select all shown" aria-label="Select all shown"></th>{% endif %}<th>Rule No</th><th>Port</th><th>Public IP</th><th>Private IP</th><th>External port</th><th>Internal port</th><th>Requestor</th><th>Sites</th><th>Description</th><th style="text-align:right">Actions</th></tr></thead>
         <tbody id="pfBody"></tbody></table>
       </div>
     </div>
@@ -419,8 +420,9 @@
     <button type="button" data-tab="subnetsearch" class="drawer-item">{{ ico_start }}<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M7.5 10.5h6M10.5 7.5v6"/></svg><span class="di-text">Subnet Search</span></button>
     <button type="button" data-tab="freesubnets" class="drawer-item">{{ ico_start }}<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><path d="M17 14v6M14 17h6"/></svg><span class="di-text">Free Subnets</span></button>
     <button type="button" data-tab="livehosts" class="drawer-item">{{ ico_start }}<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><span class="di-text">Live Hosts</span></button>
-    <button type="button" data-tab="portfwd" class="drawer-item">{{ ico_start }}<path d="M3 8h13M12 4l4 4-4 4M21 16H8M12 12l-4 4 4 4"/></svg><span class="di-text">Port Forwards</span></button>
     <button type="button" data-tab="fwdata" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg><span class="di-text">Firewall Data<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
+    <div class="drawer-section">Documents</div>
+    <button type="button" data-tab="portfwd" class="drawer-item">{{ ico_start }}<path d="M3 8h13M12 4l4 4-4 4M21 16H8M12 12l-4 4 4 4"/></svg><span class="di-text">Port Forwarding Rules<small class="di-sub">Firewall rule documentation</small></span></button>
     {% if role == 'admin' %}
     <div class="drawer-section">Administration</div>
     <button type="button" data-tab="users" class="drawer-item">{{ ico_start }}<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.6 6-5.6s6 2.3 6 5.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.5c2.6.2 4.5 2.2 4.5 5"/></svg><span class="di-text">User Management</span></button>
@@ -792,10 +794,12 @@ if ($("importFwForm")) $("importFwForm").onsubmit = e => {
 };
 
 // ---- Port forwards (documentation)
-let pfList = [], pfEditing = null;
+let pfList = [], pfEditing = null, pfShown = [];
+const pfSel = new Set();
 async function loadPortForwards() {
   try {
     pfList = (await api("/api/portforwards")).items;
+    pfSel.forEach(id => { if (!pfList.some(r => r.id === id)) pfSel.delete(id); });
     const sites = [...new Set(pfList.map(r => r.sites).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     const cur = $("pfSite").value;
     $("pfSite").replaceChildren(new Option("All sites", ""), ...sites.map(x => new Option(x, x)));
@@ -808,14 +812,21 @@ function renderPortForwards() {
   const tokens = $("pfSearch").value.toLowerCase().split(/\s+/).filter(Boolean), site = $("pfSite").value;
   const shown = pfList.filter(r => (!site || r.sites === site) &&
     tokens.every(t => [r.rule_no, r.port, r.public_ip, r.private_ip, r.external_port, r.internal_port, r.requestor, r.sites, r.description].join(" ").toLowerCase().includes(t)));
+  pfShown = shown;
   const body = $("pfBody"); body.replaceChildren();
   if (!shown.length) {
     const tr = document.createElement("tr");
-    cell(tr, pfList.length ? "No port forwards match your search." : "No port forwards yet. Click \"Add port forward\" or \"Import CSV\".", "empty").colSpan = 10;
+    cell(tr, pfList.length ? "No port forwards match your search." : "No port forwards yet. Click \"Add port forward\" or \"Import CSV\".", "empty").colSpan = 11;
     body.appendChild(tr);
   }
   shown.forEach(r => {
     const tr = document.createElement("tr");
+    if (IS_ADMIN) {
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = pfSel.has(r.id); cb.setAttribute("aria-label", "Select record");
+      cb.onchange = () => { cb.checked ? pfSel.add(r.id) : pfSel.delete(r.id); pfSelUpdate(); };
+      cell(tr, "").appendChild(cb);
+      if (cb.checked) tr.classList.add("active-fw");
+    }
     cell(tr, r.rule_no); cell(tr, r.port); cell(tr, r.public_ip, "mono"); cell(tr, r.private_ip, "mono");
     cell(tr, r.external_port, "mono"); cell(tr, r.internal_port, "mono"); cell(tr, r.requestor); cell(tr, r.sites); cell(tr, r.description);
     const act = cell(tr, ""); act.className = "actions";
@@ -832,8 +843,32 @@ function renderPortForwards() {
     }
     body.appendChild(tr);
   });
+  pfSelUpdate();
   $("pfSummary").textContent = `${pfList.length} record${pfList.length === 1 ? "" : "s"}` +
     (shown.length !== pfList.length ? ` · showing ${shown.length}` : "") + ". Documentation only: nothing is pushed to a firewall.";
+}
+function pfSelUpdate() {
+  if (!IS_ADMIN) return;
+  const n = pfSel.size, inView = pfShown.filter(r => pfSel.has(r.id)).length;
+  $("pfDeleteSelBtn").hidden = !n; $("pfDeleteSelBtn").textContent = `Delete selected (${n})`;
+  $("pfSelAll").checked = !!pfShown.length && inView === pfShown.length;
+  $("pfSelAll").indeterminate = inView > 0 && inView < pfShown.length;
+  document.querySelectorAll("#pfBody tr").forEach((tr, i) => tr.classList.toggle("active-fw", pfSel.has(pfShown[i]?.id)));
+}
+if (IS_ADMIN) {
+  $("pfSelAll").onchange = e => {
+    pfShown.forEach(r => e.target.checked ? pfSel.add(r.id) : pfSel.delete(r.id));
+    document.querySelectorAll("#pfBody input[type=checkbox]").forEach(cb => cb.checked = e.target.checked);
+    pfSelUpdate();
+  };
+  $("pfDeleteSelBtn").onclick = () => {
+    const ids = [...pfSel];
+    if (!confirm(`Delete ${ids.length} selected record${ids.length === 1 ? "" : "s"}? (Nothing is changed on any firewall.)`)) return;
+    busy($("pfDeleteSelBtn"), async () => {
+      try { const d = await jsonPost("/api/portforwards/delete", { ids }); pfSel.clear(); showMsg("pfMsg", d.message, "ok"); await loadPortForwards(); }
+      catch (e) { showMsg("pfMsg", e.message, "err"); }
+    });
+  };
 }
 let pfSearchTimer;
 $("pfSearch").oninput = () => { clearTimeout(pfSearchTimer); pfSearchTimer = setTimeout(renderPortForwards, 120); };

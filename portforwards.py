@@ -125,6 +125,18 @@ def delete(rec_id):
         return cur
 
 
+def delete_many(ids):
+    """Delete several records at once. Returns the deleted records."""
+    ids = set(ids)
+    with _lock:
+        items = _load()
+        gone = [r for r in items if r["id"] in ids]
+        if not gone:
+            raise ValueError("None of the selected records exist any more.")
+        _save([r for r in items if r["id"] not in ids])
+        return gone
+
+
 def _norm(header):
     return re.sub(r"[^a-z]", "", (header or "").lower())
 

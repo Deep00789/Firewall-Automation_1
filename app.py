@@ -297,6 +297,19 @@ def portforwards_delete(rec_id):
     return jsonify({"ok": True, "message": f"Port forward {_pf_label(r)} deleted."})
 
 
+@app.post("/api/portforwards/delete")
+@admin_only
+def portforwards_delete_many():
+    ids = request.get_json(force=True).get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"ok": False, "message": "Select at least one record."}), 400
+    with audited("portforward", "Delete port forwards", f"{len(ids)} selected"):
+        gone = portforwards.delete_many(ids)
+        record("portforward", "Delete port forwards", f"{len(gone)} records",
+               "; ".join(_pf_label(r) for r in gone)[:1900], firewall="")
+    return jsonify({"ok": True, "message": f"{len(gone)} port forward{'s' if len(gone) != 1 else ''} deleted.", "deleted": len(gone)})
+
+
 @app.post("/api/portforwards/import")
 def portforwards_import():
     file = request.files["file"]
