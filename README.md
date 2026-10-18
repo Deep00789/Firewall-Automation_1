@@ -497,7 +497,7 @@ Built from the git history (`git log`), newest first.
 ### 2026-10-18 – Port forward documentation
 - New **Port Forwards** tab: a manual record of port-forwarding rules with the fields Rule No (optional), Port (optional), Public IP, Private IP, External Port, Internal Port, Requestor (optional), Sites and Description (optional). Records are stored in `portforwards.json` and are not pushed to any firewall.
 - Add and edit one at a time, **import** from CSV (template at `/api/portforwards/template`; invalid or duplicate rows are skipped and reported) and **export** all records to CSV. All users can add, edit, import and export; only admins can delete. Every change is audited under category `portforward`.
-- Ports accept a number, a range (`8000-8010`) or a list (`80,443`). A duplicate Public IP + External Port + Port is rejected.
+- Ports accept a number, a range (`8000-8010`) or a list (`80,443` or `80/443`). A duplicate Public IP + External Port + Port is rejected.
 
 ### 2026-10-15 – IP & subnet tools merged
 - Merged the stand-alone `IP_Subnet_Checkers` tool into the portal as `subnet_tools.py`, with new tabs: **Subnet Search**, **Free Subnets**, **Live Hosts** and **Firewall Data**. It now uses the portal's login, roles, audit log (category `subnet`) and firewall inventory. Its Windows-only DPAPI password store and its separate user and firewall files are no longer used.

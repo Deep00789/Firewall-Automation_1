@@ -17,7 +17,7 @@ import config
 FILE = config.data_path("portforwards.json")
 CSV_COLUMNS = ["Rule_No", "Port", "Public IP", "Private IP", "External Port", "Internal Port", "Requestor", "Sites", "Description"]
 KEYS = ["rule_no", "port", "public_ip", "private_ip", "external_port", "internal_port", "requestor", "sites", "description"]
-_PORT_RE = re.compile(r"^\d{1,5}(-\d{1,5})?(,\s*\d{1,5}(-\d{1,5})?)*$")
+_PORT_RE = re.compile(r"^\d{1,5}(-\d{1,5})?([,/]\d{1,5}(-\d{1,5})?)*$")
 _lock = threading.Lock()
 
 
@@ -48,8 +48,8 @@ def _ports(value, label):
     if not value:
         raise ValueError(f"{label} is required.")
     if not _PORT_RE.match(value):
-        raise ValueError(f"{label} '{value}' is invalid. Use a number, a range (8000-8010) or a comma list (80,443).")
-    for part in value.split(","):
+        raise ValueError(f"{label} '{value}' is invalid. Use a number, a range (8000-8010) or a list (80,443 or 80/443).")
+    for part in re.split(r"[,/]", value):
         lo, _, hi = part.partition("-")
         if not 1 <= int(lo) <= 65535 or (hi and not int(lo) <= int(hi) <= 65535):
             raise ValueError(f"{label} '{value}' is out of range (1-65535).")
