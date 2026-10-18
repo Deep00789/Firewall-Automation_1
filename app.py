@@ -320,10 +320,16 @@ def portforwards_import():
     return jsonify({"ok": True, "results": results})
 
 
-@app.get("/api/portforwards/export")
+@app.route("/api/portforwards/export", methods=["GET", "POST"])
 def portforwards_export():
+    """All records, or only the ids posted as {"ids": [...]}."""
     items = portforwards.list_all()
-    record("portforward", "Export port forwards", details=f"{len(items)} records", firewall="")
+    if request.method == "POST":
+        ids = set(request.get_json(force=True).get("ids") or [])
+        if not ids:
+            return jsonify({"ok": False, "message": "Select at least one record."}), 400
+        items = [r for r in items if r["id"] in ids]
+    record("portforward", "Export port forwards", "selected" if request.method == "POST" else "all", f"{len(items)} records", firewall="")
     return Response(portforwards.to_csv(items), mimetype="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="port_forwards.csv"'})
 

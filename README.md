@@ -496,7 +496,7 @@ Built from the git history (`git log`), newest first.
 
 ### 2026-10-18 – Port forward documentation
 - New **Documents → Port Forwarding Rules** section in the side menu (separate from the firewall tools): a manual record of port-forwarding rules with the fields Rule No (optional), Port (optional), Public IP, Private IP, External Port, Internal Port, Requestor (optional), Sites and Description (optional). Records are stored in `portforwards.json` and are not pushed to any firewall.
-- Add and edit one at a time, **import** from CSV (template at `/api/portforwards/template`; invalid or duplicate rows are skipped and reported) and **export** all records to CSV. All users can add, edit, import and export; only admins can delete, one at a time or in bulk with the row checkboxes and a select-all box (which selects the rows currently shown). Every change is audited under category `portforward`.
+- Add and edit one at a time, **import** from CSV (template at `/api/portforwards/template`; invalid or duplicate rows are skipped and reported) and **export** to CSV (all records, or only the rows ticked with the checkboxes). All users can add, edit, import, select and export; only admins can delete, one at a time or in bulk with the row checkboxes and a select-all box (which selects the rows currently shown). Every change is audited under category `portforward`.
 - Ports accept a number, a range (`8000-8010`) or a list (`80,443` or `80/443`). A duplicate Public IP + External Port + Port is rejected.
 
 ### 2026-10-15 – IP & subnet tools merged
