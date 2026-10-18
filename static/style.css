@@ -177,6 +177,7 @@
   .badge.cat-iphost { background: #f0fdf4; color: #15803d; }
   .badge.cat-machost { background: #f5f3ff; color: #6d28d9; }
   .badge.cat-dhcp { background: #fff7ed; color: #c2410c; }
+  .badge.cat-portforward { background: #f0fdf4; color: #15803d; }
   .badge.cat-users { background: #fdf2f8; color: #be185d; }
   .badge.cat-audit { background: var(--bg); color: var(--muted); }
   @media (prefers-color-scheme: dark) {
@@ -185,6 +186,7 @@
     .badge.cat-iphost { background: #13301f; color: #86efac; }
     .badge.cat-machost { background: #2a1f4a; color: #c4b5fd; }
     .badge.cat-dhcp { background: #3a2412; color: #fdba74; }
+    .badge.cat-portforward { background: #12301c; color: #86efac; }
     .badge.cat-users { background: #3a1830; color: #f9a8d4; }
   }
 
@@ -275,3 +277,9 @@
   .drawer-item.danger .di-icon { color: var(--err); }
   .drawer-item.danger:hover { background: var(--err-soft); color: var(--err); }
   @media (prefers-reduced-motion: reduce) { .drawer, .drawer-backdrop { transition: none; } .drawer-item.shake { animation: none; } }
+
+  /* IP & subnet tools */
+  #subnetResults h3 { font-size: 15px; margin: 22px 0 0; }
+  #subnetResults h4 { font-size: 13px; margin: 14px 0 0; color: var(--muted); }
+  #fwDataBody details { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  #fwDataBody summary { cursor: pointer; font-weight: 600; }

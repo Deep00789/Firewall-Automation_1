@@ -16,6 +16,8 @@ data/
 users.json
 firewalls.json
 firewalls.json.*
+portforwards.json
+portforwards.json.*
 firewall_credentials.json
 audit.log
 .secret_key
@@ -25,3 +27,6 @@ audit.log
 *.key
 *.tmp
 *.dpapi-backup-*
+
+# Old stand-alone subnet tool (merged into the portal as subnet_tools.py); has its own .git and secrets
+IP_Subnet_Checkers/

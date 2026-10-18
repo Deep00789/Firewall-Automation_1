@@ -110,7 +110,9 @@ def login(xml_payload=""):
         raise SophosError(f"Firewall returned invalid XML: {e}") from e
     login_status = root.findtext(".//Login/status", "")
     if "success" not in login_status.lower():
-        raise SophosError(f"Login failed: {login_status or 'no login status in response'}")
+        # e.g. <Status code="534">API operations are not allowed from the requester IP address.</Status>
+        reason = login_status or (root.findtext("Status") or "").strip() or "no login status in response"
+        raise SophosError(f"Login failed: {reason}")
     return response
 
 

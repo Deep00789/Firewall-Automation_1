@@ -8,6 +8,7 @@ SESSION_COOKIE_SECURE, TRUST_PROXY. See README.md.
 """
 import os
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import timedelta
 from functools import wraps
@@ -21,8 +22,10 @@ import config
 import firewalls
 import IPHost
 import MACHost
+import portforwards
 import Sophos_Dhcp
 import Sophos_Login_And_Sendrequest as sophoslogin
+import subnet_tools
 
 app = Flask(__name__)
 if config.env_bool("TRUST_PROXY"):
@@ -257,6 +260,67 @@ def audit_export():
                     headers={"Content-Disposition": 'attachment; filename="activity_log.csv"'})
 
 
+# ---- Port-forward documentation (manual records, independent of the connected firewall)
+@app.get("/api/portforwards")
+def portforwards_list():
+    return jsonify({"ok": True, "items": portforwards.list_all()})
+
+
+def _pf_label(r):
+    return f"{r['public_ip']}:{r['external_port']} -> {r['private_ip']}:{r['internal_port']}"
+
+
+@app.post("/api/portforwards")
+def portforwards_add():
+    d = request.get_json(force=True)
+    with audited("portforward", "Add port forward", f"{d.get('public_ip', '')}:{d.get('external_port', '')}"):
+        r = portforwards.add(d, g.user)
+        record("portforward", "Add port forward", _pf_label(r), f"Site: {r['sites']}; rule: {r['rule_no'] or '-'}; requestor: {r['requestor'] or '-'}", firewall="")
+    return jsonify({"ok": True, "message": f"Port forward {_pf_label(r)} added.", "item": r})
+
+
+@app.put("/api/portforwards/<rec_id>")
+def portforwards_update(rec_id):
+    d = request.get_json(force=True)
+    with audited("portforward", "Edit port forward", rec_id):
+        r, changed = portforwards.update(rec_id, d, g.user)
+        record("portforward", "Edit port forward", _pf_label(r), f"Changed: {', '.join(changed) or 'nothing'}", firewall="")
+    return jsonify({"ok": True, "message": f"Port forward {_pf_label(r)} updated.", "item": r})
+
+
+@app.delete("/api/portforwards/<rec_id>")
+@admin_only
+def portforwards_delete(rec_id):
+    with audited("portforward", "Delete port forward", rec_id):
+        r = portforwards.delete(rec_id)
+        record("portforward", "Delete port forward", _pf_label(r), f"Site: {r['sites']}", firewall="")
+    return jsonify({"ok": True, "message": f"Port forward {_pf_label(r)} deleted."})
+
+
+@app.post("/api/portforwards/import")
+def portforwards_import():
+    file = request.files["file"]
+    with audited("portforward", "Import port forwards", file.filename):
+        results = portforwards.import_csv(file.read().decode("utf-8-sig"), g.user)
+        added = sum(r["ok"] for r in results)
+        record("portforward", "Import port forwards", file.filename, f"{added} added, {len(results) - added} skipped", firewall="")
+    return jsonify({"ok": True, "results": results})
+
+
+@app.get("/api/portforwards/export")
+def portforwards_export():
+    items = portforwards.list_all()
+    record("portforward", "Export port forwards", details=f"{len(items)} records", firewall="")
+    return Response(portforwards.to_csv(items), mimetype="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="port_forwards.csv"'})
+
+
+@app.get("/api/portforwards/template")
+def portforwards_template():
+    return Response(portforwards.template_csv(), mimetype="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="port_forwards_template.csv"'})
+
+
 # ---- Firewall inventory & connection
 def _fw_form():
     d = request.get_json(force=True)
@@ -293,6 +357,7 @@ def firewalls_update(fw_id):
     f = _fw_form()
     with audited("firewall", "Edit firewall", f["name"]):
         fw, changed = firewalls.update(fw_id, **f)
+        subnet_tools.forget(fw_id)  # loaded subnet data may belong to the old address
         record("firewall", "Edit firewall", fw["name"], f"Changed: {', '.join(changed) or 'nothing'}", firewall=fw["name"])
     return jsonify({"ok": True, "message": f"Firewall '{fw['name']}' updated.", "firewall": fw})
 
@@ -302,6 +367,7 @@ def firewalls_update(fw_id):
 def firewalls_delete(fw_id):
     with audited("firewall", "Delete firewall", fw_id):
         name = firewalls.delete(fw_id)
+        subnet_tools.forget(fw_id)
         record("firewall", "Delete firewall", name, firewall=name)
     if session.get("fw_id") == fw_id:
         session.pop("fw_id", None)
@@ -475,6 +541,81 @@ def export_leases(name):
     record("dhcp", "Export static leases", name, f"{len(leases)} leases exported to CSV")
     return Response(Sophos_Dhcp.leases_to_csv(leases), mimetype="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{name}_leases.csv"'})
+
+
+# ---- IP / subnet tools (data from one or all firewalls, kept in memory)
+def _subnet_status():
+    loaded = subnet_tools.status()
+    loaded_ids = {s["id"] for s in loaded}
+    missing = [f["name"] for f in firewalls.list_firewalls() if f["id"] not in loaded_ids]
+    return {"loaded": loaded, "missing": missing, "current": session.get("fw_id")}
+
+
+@app.get("/api/subnet/status")
+def subnet_status():
+    return jsonify({"ok": True, **_subnet_status()})
+
+
+@app.post("/api/subnet/fetch")
+def subnet_fetch():
+    """Load subnet data from the connected firewall ({"scope": "connected"}) or from all firewalls."""
+    scope = (request.get_json(silent=True) or {}).get("scope", "connected")
+    if scope == "all":
+        ids = [f["id"] for f in firewalls.list_firewalls()]
+    elif session.get("fw_id"):
+        ids = [session["fw_id"]]
+    else:
+        raise ValueError("No firewall connected. Connect to one, or fetch from all firewalls.")
+
+    def fetch(fw_id):
+        try:
+            return subnet_tools.load(firewalls.get(fw_id, with_password=True))
+        except ValueError as e:  # deleted meanwhile or password cannot be decrypted
+            return [str(e)]
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        errors = [e for errs in pool.map(fetch, ids) for e in errs]
+    record("subnet", "Fetch subnet data", "all firewalls" if scope == "all" else "connected firewall",
+           f"{len(ids)} firewall(s); {len(errors)} error(s){': ' + '; '.join(errors) if errors else ''}",
+           ok=not errors, firewall="" if scope == "all" else firewalls.get(ids[0])["name"])
+    return jsonify({"ok": True, "errors": errors, **_subnet_status()})
+
+
+@app.get("/api/subnet/search")
+def subnet_search():
+    q = request.args.get("q", "")
+    only = {session["fw_id"]} if request.args.get("scope") == "connected" and session.get("fw_id") else None
+    results = subnet_tools.search(q, only)
+    hits = [r["name"] for r in results if any(r[k] for k in subnet_tools.SECTIONS)]
+    record("subnet", "Search IP / network", q, f"Found on {len(hits)} of {len(results)} firewall(s): {', '.join(hits) or 'none'}", firewall="")
+    return jsonify({"ok": True, "results": results})
+
+
+@app.get("/api/subnet/free")
+def subnet_free():
+    try:
+        prefix, count = int(request.args.get("prefix", 23)), int(request.args.get("count", 5))
+    except ValueError:
+        raise ValueError("Prefix and count must be numbers.")
+    subnets = subnet_tools.free_subnets(prefix, count)
+    record("subnet", "Free subnet search", f"/{prefix}", f"{len(subnets)} found: {', '.join(subnets) or 'none'}", firewall="")
+    return jsonify({"ok": True, "subnets": subnets, **_subnet_status()})
+
+
+@app.get("/api/subnet/data")
+def subnet_data():
+    if not session.get("fw_id"):
+        raise ValueError("No firewall connected. Connect to one on the Firewalls tab.")
+    return jsonify({"ok": True, "data": subnet_tools.overview(session["fw_id"])})
+
+
+@app.post("/api/subnet/live")
+def subnet_live():
+    target = (request.get_json(force=True) or {}).get("target", "")
+    with audited("subnet", "Live host scan", target):
+        rows, total = subnet_tools.live_hosts(target)
+    record("subnet", "Live host scan", target, f"{len(rows)} live of {total}", firewall="")
+    return jsonify({"ok": True, "rows": rows, "total": total})
 
 
 if __name__ == "__main__":

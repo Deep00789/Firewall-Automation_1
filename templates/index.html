@@ -236,6 +236,106 @@
 
   {% if role == 'admin' %}
   <!-- USER MANAGEMENT (admins only) -->
+  <!-- SUBNET SEARCH -->
+  <section id="subnetsearch">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2>Subnet data</h2><p class="sub" style="margin:0" id="subnetStatus">Loading…</p></div>
+        <div class="row" style="flex:none">
+          <button class="btn secondary" id="fetchConnectedBtn" title="Load IP hosts, interfaces, VPNs and rules from the connected firewall">Fetch connected firewall</button>
+          <button class="btn" id="fetchAllBtn" title="Load data from every firewall in the inventory">Fetch all firewalls</button>
+        </div>
+      </div>
+      <div class="msg" id="subnetFetchMsg"></div>
+    </div>
+    <div class="card">
+      <h2>Where is this IP or network used?</h2>
+      <p class="sub">Searches IP hosts, interfaces / VLANs, firewall rules, NAT rules and IPsec VPNs in the loaded data.</p>
+      <form class="row" id="subnetSearchForm">
+        <label style="flex:2 1 240px">IP or network <input id="subnetQuery" placeholder="10.20.28.1 or 10.20.28.0/22" autocomplete="off" required></label>
+        <label style="flex:1 1 200px">Firewalls
+          <select id="subnetScope"><option value="all">All loaded firewalls</option><option value="connected">Connected firewall only</option></select></label>
+        <div style="flex:none;align-self:flex-end"><button class="btn" id="subnetSearchBtn" type="submit">Search</button></div>
+      </form>
+      <div class="msg" id="subnetSearchMsg"></div>
+      <div id="subnetResults"></div>
+    </div>
+  </section>
+
+  <!-- FREE SUBNETS -->
+  <section id="freesubnets">
+    <div class="card">
+      <h2>Find free subnets</h2>
+      <p class="sub">Proposes private subnets (192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12) that do not overlap any IP host, interface or VPN network on the loaded firewalls. Routes are not checked.</p>
+      <form class="row" id="freeForm">
+        <label style="flex:0 1 140px">Prefix length <input id="freePrefix" type="number" min="8" max="30" value="23" required></label>
+        <label style="flex:0 1 140px">How many <input id="freeCount" type="number" min="1" max="300" value="5" required></label>
+        <div style="flex:none;align-self:flex-end"><button class="btn" id="freeBtn" type="submit">Find</button></div>
+      </form>
+      <p class="sub" id="freeCoverage" style="margin:10px 0 0"></p>
+      <div class="msg" id="freeMsg"></div>
+      <div class="table-wrap" id="freeWrap" hidden>
+        <table><thead><tr><th>#</th><th>Free subnet</th></tr></thead><tbody id="freeBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIVE HOSTS -->
+  <section id="livehosts">
+    <div class="card">
+      <h2>Live host check</h2>
+      <p class="sub">Pings every address, then checks ports 21, 22, 80, 443, 8080 and 8443 on addresses that did not reply. IPv4, /24 or smaller. The scan runs from the portal server.</p>
+      <form class="row" id="liveForm">
+        <label style="flex:2 1 240px">IP or network <input id="liveTarget" placeholder="172.16.64.0/26" autocomplete="off" required></label>
+        <div style="flex:none;align-self:flex-end"><button class="btn" id="liveBtn" type="submit">Scan</button></div>
+      </form>
+      <p class="sub" id="liveCount" style="margin:10px 0 0"></p>
+      <div class="msg" id="liveMsg"></div>
+      <div class="table-wrap" id="liveWrap" hidden>
+        <table><thead><tr><th>IP</th><th>Result</th></tr></thead><tbody id="liveBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- PORT FORWARDS (documentation) -->
+  <section id="portfwd">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2>Port forwards</h2><p class="sub" style="margin:0" id="pfSummary">Documentation of port-forwarding rules. Nothing here is pushed to a firewall.</p></div>
+        <div class="row" style="flex:none">
+          <a class="btn secondary" href="/api/portforwards/export" id="pfExportBtn">Export CSV</a>
+          <button class="btn secondary" id="pfImportBtn">Import CSV</button>
+          <button class="btn" id="pfAddBtn">Add port forward</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <label style="flex:3 1 260px">Search
+          <span class="search-box">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input id="pfSearch" type="search" placeholder="IP, port, site, requestor, rule no, description…" autocomplete="off">
+          </span></label>
+        <label style="flex:1 1 160px">Site <select id="pfSite"><option value="">All sites</option></select></label>
+      </div>
+      <div class="msg" id="pfMsg"></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Rule No</th><th>Port</th><th>Public IP</th><th>Private IP</th><th>External port</th><th>Internal port</th><th>Requestor</th><th>Sites</th><th>Description</th><th style="text-align:right">Actions</th></tr></thead>
+        <tbody id="pfBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- FIREWALL DATA -->
+  <section id="fwdata">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2 id="fwDataTitle">Firewall data</h2><p class="sub" style="margin:0" id="fwDataSub"></p></div>
+        <button class="btn secondary" id="fwDataRefresh">Refresh from firewall</button>
+      </div>
+      <div class="msg" id="fwDataMsg"></div>
+      <div id="fwDataBody"></div>
+    </div>
+  </section>
+
   <section id="users">
     <div class="card">
       <h2>Users</h2>
@@ -278,7 +378,7 @@
         <label style="flex:1 1 150px">Category
           <select id="fCategory">
             <option value="">All categories</option><option value="auth">Sign-in</option><option value="firewall">Firewall connection</option>
-            <option value="iphost">IP hosts</option><option value="machost">MAC hosts</option><option value="dhcp">DHCP leases</option><option value="users">User management</option><option value="audit">Activity log</option>
+            <option value="iphost">IP hosts</option><option value="machost">MAC hosts</option><option value="dhcp">DHCP leases</option><option value="subnet">Subnet tools</option><option value="portforward">Port forwards</option><option value="users">User management</option><option value="audit">Activity log</option>
           </select></label>
         <label style="flex:1 1 120px">Result
           <select id="fResult"><option value="">All</option><option value="ok">Success</option><option value="failed">Failed</option></select></label>
@@ -315,6 +415,12 @@
     <button type="button" data-tab="iphosts" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v4.3M12 11.5l-5.6 5.7M12 11.5l5.6 5.7"/></svg><span class="di-text">IP Hosts<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
     <button type="button" data-tab="machosts" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 18v2M11 18v2M15 18v2M7 10h4v4H7zM14 10h3M14 13h3"/></svg><span class="di-text">MAC Hosts<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
     <button type="button" data-tab="dhcp" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<rect x="3" y="3.5" width="18" height="7" rx="1.6"/><rect x="3" y="13.5" width="18" height="7" rx="1.6"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg><span class="di-text">DHCP Static Leases<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
+    <div class="drawer-section">IP &amp; subnet tools</div>
+    <button type="button" data-tab="subnetsearch" class="drawer-item">{{ ico_start }}<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M7.5 10.5h6M10.5 7.5v6"/></svg><span class="di-text">Subnet Search</span></button>
+    <button type="button" data-tab="freesubnets" class="drawer-item">{{ ico_start }}<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><path d="M17 14v6M14 17h6"/></svg><span class="di-text">Free Subnets</span></button>
+    <button type="button" data-tab="livehosts" class="drawer-item">{{ ico_start }}<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><span class="di-text">Live Hosts</span></button>
+    <button type="button" data-tab="portfwd" class="drawer-item">{{ ico_start }}<path d="M3 8h13M12 4l4 4-4 4M21 16H8M12 12l-4 4 4 4"/></svg><span class="di-text">Port Forwards</span></button>
+    <button type="button" data-tab="fwdata" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg><span class="di-text">Firewall Data<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
     {% if role == 'admin' %}
     <div class="drawer-section">Administration</div>
     <button type="button" data-tab="users" class="drawer-item">{{ ico_start }}<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.6 6-5.6s6 2.3 6 5.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.5c2.6.2 4.5 2.2 4.5 5"/></svg><span class="di-text">User Management</span></button>
@@ -369,6 +475,55 @@
   </form>
 </dialog>
 
+<!-- Add / edit port forward -->
+<dialog id="pfDialog" class="wide">
+  <form method="dialog" id="pfForm" autocomplete="off">
+    <h2 id="pfDialogTitle">Add port forward</h2>
+    <div class="row">
+      <label>Rule No <input id="pfRuleNo" maxlength="64" placeholder="Optional"></label>
+      <label>Port <input id="pfPort" maxlength="64" placeholder="Optional, e.g. TCP"></label>
+    </div>
+    <div class="row">
+      <label>Public IP <input id="pfPublic" required placeholder="203.0.113.10"></label>
+      <label>Private IP <input id="pfPrivate" required placeholder="192.168.1.20"></label>
+    </div>
+    <div class="row">
+      <label>External port <input id="pfExt" required placeholder="8443, 8000-8010 or 80,443"></label>
+      <label>Internal port <input id="pfInt" required placeholder="443"></label>
+    </div>
+    <div class="row">
+      <label>Requestor <input id="pfRequestor" maxlength="128" placeholder="Optional"></label>
+      <label>Sites <input id="pfSites" required maxlength="128" list="pfSiteList" placeholder="e.g. Pune"></label>
+    </div>
+    <datalist id="pfSiteList"></datalist>
+    <label>Description <input id="pfDesc" maxlength="1000" placeholder="Optional"></label>
+    <div class="msg" id="pfDialogMsg"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Cancel</button>
+      <button type="submit" class="btn" id="pfSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Import port forwards from CSV -->
+<dialog id="pfImportDialog" class="wide">
+  <form method="dialog" id="pfImportForm">
+    <h2>Import port forwards from CSV</h2>
+    <p class="sub">Columns: <code>Rule_No,Port,Public IP,Private IP,External Port,Internal Port,Requestor,Sites,Description</code>
+      (Rule_No, Port, Requestor and Description optional). <a href="/api/portforwards/template">Download template</a>.
+      Invalid and duplicate rows are skipped. In Excel use Save As &rarr; CSV.</p>
+    <label>CSV file <input type="file" id="pfImportFile" accept=".csv" required></label>
+    <div class="msg" id="pfImportMsg"></div>
+    <div class="table-wrap" id="pfImportWrap" hidden style="max-height:260px">
+      <table><thead><tr><th>Line</th><th>Public IP : port</th><th>Result</th></tr></thead><tbody id="pfImportBody"></tbody></table>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Close</button>
+      <button type="submit" class="btn" id="pfImportSubmit">Import</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Change own password -->
 <dialog id="pwDialog">
   <form method="dialog" id="pwForm">
@@ -409,6 +564,9 @@ function showTab(name) {
   document.querySelectorAll(`[data-tab="${name}"]`).forEach(el => el.classList.add("active")); $(name).classList.add("active");
   if (name === "iphosts" && !hostsLoaded) { hostsLoaded = true; loadHosts(); $("hostSearch").focus(); }
   if (name === "machosts" && !macsLoaded) { macsLoaded = true; loadMacHosts(); $("macSearch").focus(); }
+  if (name === "subnetsearch" || name === "freesubnets") loadSubnetStatus();
+  if (name === "portfwd") loadPortForwards();
+  if (name === "fwdata") loadFwData();
   if (name === "users") loadUsers();
   if (name === "activity") loadAudit();
 }
@@ -630,6 +788,94 @@ if ($("importFwForm")) $("importFwForm").onsubmit = e => {
       showMsg("importFwMsg", `${added} added, ${results.length - added} skipped.`, added ? "ok" : "err");
       await loadFirewalls();
     } catch (err) { showMsg("importFwMsg", err.message, "err"); }
+  });
+};
+
+// ---- Port forwards (documentation)
+let pfList = [], pfEditing = null;
+async function loadPortForwards() {
+  try {
+    pfList = (await api("/api/portforwards")).items;
+    const sites = [...new Set(pfList.map(r => r.sites).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const cur = $("pfSite").value;
+    $("pfSite").replaceChildren(new Option("All sites", ""), ...sites.map(x => new Option(x, x)));
+    $("pfSite").value = sites.includes(cur) ? cur : "";
+    $("pfSiteList").replaceChildren(...sites.map(x => new Option(x)));
+    renderPortForwards();
+  } catch (e) { showMsg("pfMsg", e.message, "err"); }
+}
+function renderPortForwards() {
+  const tokens = $("pfSearch").value.toLowerCase().split(/\s+/).filter(Boolean), site = $("pfSite").value;
+  const shown = pfList.filter(r => (!site || r.sites === site) &&
+    tokens.every(t => [r.rule_no, r.port, r.public_ip, r.private_ip, r.external_port, r.internal_port, r.requestor, r.sites, r.description].join(" ").toLowerCase().includes(t)));
+  const body = $("pfBody"); body.replaceChildren();
+  if (!shown.length) {
+    const tr = document.createElement("tr");
+    cell(tr, pfList.length ? "No port forwards match your search." : "No port forwards yet. Click \"Add port forward\" or \"Import CSV\".", "empty").colSpan = 10;
+    body.appendChild(tr);
+  }
+  shown.forEach(r => {
+    const tr = document.createElement("tr");
+    cell(tr, r.rule_no); cell(tr, r.port); cell(tr, r.public_ip, "mono"); cell(tr, r.private_ip, "mono");
+    cell(tr, r.external_port, "mono"); cell(tr, r.internal_port, "mono"); cell(tr, r.requestor); cell(tr, r.sites); cell(tr, r.description);
+    const act = cell(tr, ""); act.className = "actions";
+    const edit = document.createElement("button"); edit.className = "btn secondary small"; edit.textContent = "Edit";
+    edit.onclick = () => openPfDialog(r); act.appendChild(edit);
+    if (IS_ADMIN) {
+      const del = document.createElement("button"); del.className = "btn danger-outline small"; del.textContent = "Delete";
+      del.onclick = async () => {
+        if (!confirm(`Delete the record ${r.public_ip}:${r.external_port} -> ${r.private_ip}:${r.internal_port}? (Nothing is changed on any firewall.)`)) return;
+        try { showMsg("pfMsg", (await jsonPost(`/api/portforwards/${r.id}`, null, "DELETE")).message, "ok"); await loadPortForwards(); }
+        catch (e) { showMsg("pfMsg", e.message, "err"); }
+      };
+      act.appendChild(del);
+    }
+    body.appendChild(tr);
+  });
+  $("pfSummary").textContent = `${pfList.length} record${pfList.length === 1 ? "" : "s"}` +
+    (shown.length !== pfList.length ? ` · showing ${shown.length}` : "") + ". Documentation only: nothing is pushed to a firewall.";
+}
+let pfSearchTimer;
+$("pfSearch").oninput = () => { clearTimeout(pfSearchTimer); pfSearchTimer = setTimeout(renderPortForwards, 120); };
+$("pfSite").onchange = renderPortForwards;
+function openPfDialog(r) {
+  pfEditing = r || null; openDialog("pfDialog");
+  $("pfDialogTitle").textContent = r ? "Edit port forward" : "Add port forward";
+  $("pfRuleNo").value = r?.rule_no || ""; $("pfPort").value = r?.port || ""; $("pfPublic").value = r?.public_ip || "";
+  $("pfPrivate").value = r?.private_ip || ""; $("pfExt").value = r?.external_port || ""; $("pfInt").value = r?.internal_port || "";
+  $("pfRequestor").value = r?.requestor || ""; $("pfSites").value = r?.sites || ""; $("pfDesc").value = r?.description || "";
+}
+$("pfAddBtn").onclick = () => openPfDialog(null);
+$("pfForm").onsubmit = e => {
+  e.preventDefault();
+  const body = { rule_no: $("pfRuleNo").value, port: $("pfPort").value, public_ip: $("pfPublic").value, private_ip: $("pfPrivate").value,
+                 external_port: $("pfExt").value, internal_port: $("pfInt").value, requestor: $("pfRequestor").value,
+                 sites: $("pfSites").value, description: $("pfDesc").value };
+  busy($("pfSave"), async () => {
+    try {
+      const d = pfEditing ? await jsonPost(`/api/portforwards/${pfEditing.id}`, body, "PUT") : await jsonPost("/api/portforwards", body);
+      $("pfDialog").close(); showMsg("pfMsg", d.message, "ok"); await loadPortForwards();
+    } catch (err) { showMsg("pfDialogMsg", err.message, "err"); }
+  });
+};
+$("pfImportBtn").onclick = () => { openDialog("pfImportDialog"); $("pfImportWrap").hidden = true; };
+$("pfImportForm").onsubmit = e => {
+  e.preventDefault();
+  const form = new FormData(); form.append("file", $("pfImportFile").files[0]);
+  busy($("pfImportSubmit"), async () => {
+    try {
+      const { results } = await api("/api/portforwards/import", { method: "POST", body: form });
+      const body = $("pfImportBody"); body.replaceChildren();
+      results.forEach(r => {
+        const tr = document.createElement("tr"); cell(tr, r.line); cell(tr, r.name, "mono");
+        const b = document.createElement("span"); b.className = `badge ${r.ok ? "ok" : "warn"}`; b.textContent = r.ok ? "Added" : r.reason;
+        cell(tr, "").appendChild(b); body.appendChild(tr);
+      });
+      $("pfImportWrap").hidden = false;
+      const added = results.filter(r => r.ok).length;
+      showMsg("pfImportMsg", `${added} added, ${results.length - added} skipped.`, added ? "ok" : "err");
+      await loadPortForwards();
+    } catch (err) { showMsg("pfImportMsg", err.message, "err"); }
   });
 };
 
@@ -1045,6 +1291,135 @@ $("pwForm").onsubmit = e => {
   });
 };
 
+// ---- IP & subnet tools (data is loaded from firewalls into server memory, then searched there)
+const SUBNET_SECTIONS = [["IPHost", "IP Hosts"], ["Interface", "Interfaces / VLANs"], ["FirewallRule", "Firewall Rules"], ["NATRule", "NAT Rules"], ["VPN", "VPN Tunnels"]];
+const shortTime = iso => new Date(iso).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+
+// Generic table for a list of objects (columns = keys of the first row; lists are joined).
+function objTable(rows) {
+  if (!rows.length) { const p = document.createElement("p"); p.className = "sub"; p.textContent = "None"; return p; }
+  const keys = Object.keys(rows[0]);
+  const wrap = document.createElement("div"); wrap.className = "table-wrap";
+  const table = document.createElement("table"), head = document.createElement("tr"), body = document.createElement("tbody");
+  keys.forEach(k => { const th = document.createElement("th"); th.textContent = k; head.appendChild(th); });
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    keys.forEach(k => cell(tr, Array.isArray(r[k]) ? r[k].filter(Boolean).join(", ") : r[k]));
+    body.appendChild(tr);
+  });
+  const thead = document.createElement("thead"); thead.appendChild(head);
+  table.append(thead, body); wrap.appendChild(table); return wrap;
+}
+
+function renderSubnetStatus(d) {
+  const loaded = d.loaded.map(s => `${s.name} (${shortTime(s.loaded_at)})`).join(", ");
+  $("subnetStatus").textContent = d.loaded.length
+    ? `Loaded: ${loaded}.` + (d.missing.length ? ` Not loaded: ${d.missing.join(", ")}.` : "")
+    : "No data loaded yet. Fetch from the connected firewall or from all firewalls.";
+  $("freeCoverage").textContent = d.loaded.length
+    ? `Checked against: ${d.loaded.map(s => s.name).join(", ")}.` + (d.missing.length ? ` Not loaded (could still conflict): ${d.missing.join(", ")}.` : "")
+    : "No data loaded yet: open Subnet Search and fetch firewall data first.";
+  $("fetchConnectedBtn").disabled = !fwCurrent;
+}
+
+async function loadSubnetStatus() {
+  try { renderSubnetStatus(await api("/api/subnet/status")); }
+  catch (e) { showMsg("subnetFetchMsg", e.message, "err"); }
+}
+
+async function fetchSubnetData(scope, btn) {
+  hideMsg("subnetFetchMsg");
+  await busy(btn, async () => {
+    try {
+      const d = await jsonPost("/api/subnet/fetch", { scope });
+      renderSubnetStatus(d);
+      if (d.errors.length) showMsg("subnetFetchMsg", `Finished with errors: ${d.errors.join("; ")}`, "err");
+      else showMsg("subnetFetchMsg", "Data fetched.", "ok");
+    } catch (e) { showMsg("subnetFetchMsg", e.message, "err"); }
+  });
+}
+$("fetchConnectedBtn").onclick = () => fetchSubnetData("connected", $("fetchConnectedBtn"));
+$("fetchAllBtn").onclick = () => fetchSubnetData("all", $("fetchAllBtn"));
+
+$("subnetSearchForm").onsubmit = e => {
+  e.preventDefault(); hideMsg("subnetSearchMsg");
+  busy($("subnetSearchBtn"), async () => {
+    const out = $("subnetResults"); out.replaceChildren();
+    try {
+      const q = new URLSearchParams({ q: $("subnetQuery").value.trim(), scope: $("subnetScope").value });
+      const d = await api(`/api/subnet/search?${q}`);
+      if (!d.results.length) return showMsg("subnetSearchMsg", "No firewall data loaded. Fetch data first.", "err");
+      const hits = d.results.filter(r => SUBNET_SECTIONS.some(([k]) => r[k].length));
+      const misses = d.results.filter(r => !hits.includes(r)).map(r => r.name);
+      showMsg("subnetSearchMsg", hits.length
+        ? `Found on ${hits.length} of ${d.results.length} firewall(s): ${hits.map(r => r.name).join(", ")}.` + (misses.length ? ` No usage on: ${misses.join(", ")}.` : "")
+        : `Not found on any of the ${d.results.length} firewall(s) searched.`, hits.length ? "ok" : "err");
+      hits.forEach(r => {
+        const h = document.createElement("h3"); h.textContent = `Firewall: ${r.name}`; out.appendChild(h);
+        SUBNET_SECTIONS.forEach(([k, label]) => {
+          if (!r[k].length) return;
+          const t = document.createElement("h4"); t.textContent = `${label} (${r[k].length})`;
+          out.append(t, objTable(r[k]));
+        });
+      });
+    } catch (err) { showMsg("subnetSearchMsg", err.message, "err"); }
+  });
+};
+
+$("freeForm").onsubmit = e => {
+  e.preventDefault(); hideMsg("freeMsg");
+  busy($("freeBtn"), async () => {
+    try {
+      const q = new URLSearchParams({ prefix: $("freePrefix").value, count: $("freeCount").value });
+      const d = await api(`/api/subnet/free?${q}`);
+      renderSubnetStatus(d);
+      const body = $("freeBody"); body.replaceChildren();
+      d.subnets.forEach((s, i) => { const tr = document.createElement("tr"); cell(tr, i + 1); cell(tr, s, "mono"); body.appendChild(tr); });
+      $("freeWrap").hidden = !d.subnets.length;
+      if (!d.loaded.length) showMsg("freeMsg", "Warning: no firewall data is loaded, so nothing was checked.", "err");
+      else if (!d.subnets.length) showMsg("freeMsg", "No free subnet found.", "err");
+    } catch (err) { showMsg("freeMsg", err.message, "err"); }
+  });
+};
+
+$("liveForm").onsubmit = e => {
+  e.preventDefault(); hideMsg("liveMsg"); $("liveCount").textContent = "";
+  busy($("liveBtn"), async () => {
+    try {
+      const d = await jsonPost("/api/subnet/live", { target: $("liveTarget").value.trim() });
+      const body = $("liveBody"); body.replaceChildren();
+      d.rows.forEach(r => { const tr = document.createElement("tr"); cell(tr, r.IP, "mono"); cell(tr, r.Result); body.appendChild(tr); });
+      $("liveWrap").hidden = !d.rows.length;
+      $("liveCount").textContent = `${d.rows.length} live of ${d.total} address${d.total === 1 ? "" : "es"}.`;
+    } catch (err) { $("liveWrap").hidden = true; showMsg("liveMsg", err.message, "err"); }
+  });
+};
+
+async function loadFwData() {
+  hideMsg("fwDataMsg");
+  const out = $("fwDataBody"); out.replaceChildren();
+  $("fwDataTitle").textContent = fwCurrent ? `Firewall data: ${fwCurrent.name}` : "Firewall data";
+  try {
+    const d = (await api("/api/subnet/data")).data;
+    if (!d) { $("fwDataSub").textContent = "No data loaded for this firewall yet. Click Refresh from firewall."; return; }
+    $("fwDataSub").textContent = `Fetched ${shortTime(d.loaded_at)}`;
+    SUBNET_SECTIONS.forEach(([k, label]) => {
+      const det = document.createElement("details"), sum = document.createElement("summary");
+      sum.textContent = `${label} (${d[k].length})`; det.appendChild(sum);
+      det.ontoggle = () => { if (det.open && det.children.length === 1) det.appendChild(objTable(d[k])); };
+      out.appendChild(det);
+    });
+  } catch (e) { showMsg("fwDataMsg", e.message, "err"); }
+}
+$("fwDataRefresh").onclick = () => busy($("fwDataRefresh"), async () => {
+  try {
+    const d = await jsonPost("/api/subnet/fetch", { scope: "connected" });
+    await loadFwData();
+    if (d.errors.length) showMsg("fwDataMsg", `Finished with errors: ${d.errors.join("; ")}`, "err");
+    else showMsg("fwDataMsg", "Data refreshed.", "ok");
+  } catch (e) { showMsg("fwDataMsg", e.message, "err"); }
+});
+
 // ---- User management (admins only)
 async function loadUsers() {
   if (!$("usersBody")) return;
@@ -1094,7 +1469,7 @@ if ($("createUserForm")) $("createUserForm").onsubmit = e => {
 };
 
 // ---- Activity log (admins only)
-const CATEGORY_LABELS = { auth: "Sign-in", firewall: "Firewall", iphost: "IP hosts", machost: "MAC hosts", dhcp: "DHCP", users: "Users", audit: "Activity log" };
+const CATEGORY_LABELS = { auth: "Sign-in", firewall: "Firewall", iphost: "IP hosts", machost: "MAC hosts", dhcp: "DHCP", subnet: "Subnet tools", portforward: "Port forwards", users: "Users", audit: "Activity log" };
 
 function auditQuery() {
   // Dates are the viewer's local days, sent as exact UTC instants.

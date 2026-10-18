@@ -7,7 +7,8 @@ A small Flask web portal for managing **Sophos XG / SFOS firewalls** through the
 - **view, add, bulk-import and export DHCP static leases** with validation,
 - look up whether a MAC/IP is **already bound** on any DHCP server,
 - manage portal **users and roles** (admin / user),
-- review a full **audit log** of who did what, on which firewall, and when.
+- review a full **audit log** of who did what, on which firewall, and when,
+- find **where an IP or network is used** across all firewalls (hosts, interfaces, rules, NAT, VPN), propose **free subnets**, and run a **live host check** (nmap).
 
 It runs on **Linux** (bare-metal, VM or **Docker**) and on **Windows**.
 
@@ -42,7 +43,7 @@ It runs on **Linux** (bare-metal, VM or **Docker**) and on **Windows**.
 | **OS** | Linux (e.g. Ubuntu 22.04 / 24.04, or any distro that runs Docker) or Windows. |
 | **Docker** (optional) | Docker Engine 24+ with the Compose plugin (`docker compose`). |
 | **Python** | 3.10+ when running without Docker. |
-| **Python packages** | Listed in `requirements.txt`: Flask, requests, cryptography, gunicorn (Linux only). The Docker image uses Python 3.12. |
+| **Python packages** | Listed in `requirements.txt`: Flask, requests, cryptography, python-nmap, gunicorn (Linux only). The Docker image uses Python 3.13 and also installs the `nmap` program. |
 | **Sophos firewall** | API access enabled: *Backup & firmware → API → API configuration* → enable, and add the portal machine's IP to the **Allowed IP addresses**. An admin account with rights to edit hosts and DHCP. |
 | **Network** | The portal host must reach each firewall's web admin port (usually `https://<ip>:4444`). |
 
@@ -64,6 +65,8 @@ FirewallAutomation/
 ├── IPHost.py                       # List IP hosts; append IPs to an IP List host
 ├── MACHost.py                      # List MAC hosts; append MACs to a MAC List host
 ├── Sophos_Dhcp.py                  # DHCP servers, static lease validation/import/export
+├── portforwards.py                 # Port-forward documentation records (portforwards.json), CSV import / export
+├── subnet_tools.py                 # IP / subnet search, free subnets, live host scan (nmap)
 ├── sophos_firewall_api.py          # Stand-alone REST (v2) client example (not used by the portal)
 ├── requirements.txt                # Python dependencies
 ├── Dockerfile                      # Builds the container image
@@ -80,6 +83,7 @@ FirewallAutomation/
 ├── .claude/launch.json             # Editor launch configuration
 ├── _original_backup/               # Earlier versions of the scripts (reference only)
 ├── _backup_before_linux/           # Windows-only versions before the Linux/Docker port (reference only)
+├── IP_Subnet_Checkers/             # Old stand-alone subnet tool, merged into subnet_tools.py (git- and docker-ignored)
 └── firewallautomation/             # Local Python virtual environment (not committed)
 ```
 
@@ -297,11 +301,20 @@ Each new lease is checked before it is sent to the firewall:
 | Not in a dynamic range | `IP is in dynamic range` |
 | No duplicate hostname / MAC / IP (on the server **or** within the file) | `… already exists` |
 
-### 5. User Management (admins only)
+### 5. IP & subnet tools
+These work on data **loaded into the portal's memory** from the firewalls. Open **Subnet Search** and click **Fetch connected firewall** or **Fetch all firewalls** first. The data is kept until the portal restarts, and it is shared by all users. Fetch again to refresh it.
+- **Subnet Search** shows where an IP or network is used: IP hosts, interfaces / VLANs, firewall rules and NAT rules that use those hosts, and IPsec VPNs. You can search all loaded firewalls or only the connected one.
+- **Free Subnets** proposes private subnets of a chosen size (/8–/30) that do not overlap any IP host, interface or VPN network on the loaded firewalls. Routes are not checked, and firewalls that are not loaded are listed as a warning.
+- **Live Hosts** pings an IPv4 address or network (/24 or smaller), then checks TCP 21, 22, 80, 443, 8080 and 8443 on addresses that did not reply. The scan runs **from the portal server**, so it needs the `nmap` program (included in the Docker image). The container runs as root, which the SYN scan requires.
+- **Firewall Data** (needs a connected firewall) lists everything that was loaded for that firewall.
+
+Rules that use an IP host only through an **IP host group** are not found yet, because host groups are not fetched.
+
+### 6. User Management (admins only)
 Create users, delete users, reset passwords, change roles. Safeguards: you cannot delete yourself, remove your own admin role, or remove the last admin. Resetting a password signs out that user's open sessions.
 
-### 6. Activity Log (admins only)
-Filter by user, firewall, category (`auth`, `firewall`, `iphost`, `machost`, `dhcp`, `users`, `audit`), result, date range or free text, and export to CSV. Times are stored in UTC.
+### 7. Activity Log (admins only)
+Filter by user, firewall, category (`auth`, `firewall`, `iphost`, `machost`, `dhcp`, `subnet`, `users`, `audit`), result, date range or free text, and export to CSV. Times are stored in UTC.
 
 ### Roles at a glance
 
@@ -481,7 +494,20 @@ Endpoints marked 🔌 need a connected firewall; 🔒 are admin-only.
 
 Built from the git history (`git log`), newest first.
 
-### 2026-10-15
+### 2026-10-18 – Port forward documentation
+- New **Port Forwards** tab: a manual record of port-forwarding rules with the fields Rule No (optional), Port (optional), Public IP, Private IP, External Port, Internal Port, Requestor (optional), Sites and Description (optional). Records are stored in `portforwards.json` and are not pushed to any firewall.
+- Add and edit one at a time, **import** from CSV (template at `/api/portforwards/template`; invalid or duplicate rows are skipped and reported) and **export** all records to CSV. All users can add, edit, import and export; only admins can delete. Every change is audited under category `portforward`.
+- Ports accept a number, a range (`8000-8010`) or a list (`80,443`). A duplicate Public IP + External Port + Port is rejected.
+
+### 2026-10-15 – IP & subnet tools merged
+- Merged the stand-alone `IP_Subnet_Checkers` tool into the portal as `subnet_tools.py`, with new tabs: **Subnet Search**, **Free Subnets**, **Live Hosts** and **Firewall Data**. It now uses the portal's login, roles, audit log (category `subnet`) and firewall inventory. Its Windows-only DPAPI password store and its separate user and firewall files are no longer used.
+- Fixes compared with the old tool:
+  - Free-subnet search no longer fails for prefixes /8–/15.
+  - A failed firewall login is reported instead of silently wiping the loaded data.
+  - The full dataset is no longer printed to the console.
+  - Data is cached per firewall id and cleared when a firewall is edited or deleted.
+- Docker image: installs `nmap` and `python-nmap`, and the duplicated `ENV` lines are cleaned up. `DATA_DIR` now defaults to `/app/data`, matching `docker-compose.yml`.
+- Firewall login errors now show the firewall's own message, for example *API operations are not allowed from the requester IP address*.
 - Verified the portal runs correctly on an Ubuntu host.
 - Repository cleanup: stopped tracking runtime and secret files (`.secret_key`, `users.json`, `firewalls.json`, `firewall_credentials.json`, `audit.log`) and compiled `__pycache__/*.pyc` files. Removed a stray empty template file and an accidental self-referencing `Firewall-Automation_1` submodule entry.
 - README: added this changelog, updated the project structure and expanded the security notes.
