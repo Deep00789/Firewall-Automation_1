@@ -18,6 +18,8 @@ firewalls.json
 firewalls.json.*
 portforwards.json
 portforwards.json.*
+vpndocs.json
+vpndocs.json.*
 firewall_credentials.json
 audit.log
 .secret_key

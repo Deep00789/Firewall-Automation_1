@@ -263,6 +263,34 @@
     </div>
   </section>
 
+  <!-- VPN DETAILS (documentation) -->
+  <section id="vpndoc">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2>Documents · VPN details</h2><p class="sub" style="margin:0" id="vdSummary">Manual documentation of VPN tunnels. Nothing here is read from or pushed to a firewall.</p></div>
+        <div class="row" style="flex:none">
+          <button class="btn danger-outline admin-only" id="vdDeleteSelBtn" hidden>Delete selected</button>
+          <button class="btn secondary" id="vdExportSelBtn" hidden>Export selected</button>
+          <button class="btn secondary" id="vdExportBtn" title="Export every record">Export CSV</button>
+          <button class="btn secondary" id="vdImportBtn">Import CSV</button>
+          <button class="btn" id="vdAddBtn">Add VPN</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <label style="flex:3 1 260px">Search
+          <span class="search-box">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input id="vdSearch" type="search" placeholder="VPN name, gateway, subnet, description…" autocomplete="off">
+          </span></label>
+      </div>
+      <div class="msg" id="vdMsg"></div>
+      <div class="table-wrap">
+        <table><thead><tr><th style="width:28px"><input type="checkbox" id="vdSelAll" title="Select all shown" aria-label="Select all shown"></th><th>VPN name</th><th>Local GW</th><th>Remote GW</th><th>Local subnet</th><th>Remote subnet</th><th>Description</th><th style="text-align:right">Actions</th></tr></thead>
+        <tbody id="vdBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
   {% if role == 'admin' %}
   <!-- USER MANAGEMENT (admins only) -->
   <!-- SUBNET SEARCH -->
@@ -380,7 +408,7 @@
         <label style="flex:1 1 150px">Category
           <select id="fCategory">
             <option value="">All categories</option><option value="auth">Sign-in</option><option value="firewall">Firewall connection</option>
-            <option value="iphost">IP hosts</option><option value="machost">MAC hosts</option><option value="dhcp">DHCP leases</option><option value="subnet">Subnet tools</option><option value="portforward">Port forwards</option><option value="users">User management</option><option value="audit">Activity log</option>
+            <option value="iphost">IP hosts</option><option value="machost">MAC hosts</option><option value="dhcp">DHCP leases</option><option value="subnet">Subnet tools</option><option value="portforward">Port forwards</option><option value="vpndoc">VPN details</option><option value="users">User management</option><option value="audit">Activity log</option>
           </select></label>
         <label style="flex:1 1 120px">Result
           <select id="fResult"><option value="">All</option><option value="ok">Success</option><option value="failed">Failed</option></select></label>
@@ -424,6 +452,7 @@
     <button type="button" data-tab="fwdata" data-needs-fw class="drawer-item locked" aria-disabled="true">{{ ico_start }}<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg><span class="di-text">Firewall Data<small class="di-sub">Connect a firewall first</small></span>{{ di_lock }}</button>
     <div class="drawer-section">Documents</div>
     <button type="button" data-tab="portfwd" class="drawer-item">{{ ico_start }}<path d="M3 8h13M12 4l4 4-4 4M21 16H8M12 12l-4 4 4 4"/></svg><span class="di-text">Port Forwarding Rules<small class="di-sub">Firewall rule documentation</small></span></button>
+    <button type="button" data-tab="vpndoc" class="drawer-item">{{ ico_start }}<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3M12 15v2"/></svg><span class="di-text">VPN Details<small class="di-sub">VPN tunnel documentation</small></span></button>
     {% if role == 'admin' %}
     <div class="drawer-section">Administration</div>
     <button type="button" data-tab="users" class="drawer-item">{{ ico_start }}<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.6 6-5.6s6 2.3 6 5.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.5c2.6.2 4.5 2.2 4.5 5"/></svg><span class="di-text">User Management</span></button>
@@ -527,6 +556,47 @@
   </form>
 </dialog>
 
+<!-- Add / edit VPN -->
+<dialog id="vdDialog" class="wide">
+  <form method="dialog" id="vdForm" autocomplete="off">
+    <h2 id="vdDialogTitle">Add VPN</h2>
+    <label>VPN name <input id="vdName" required maxlength="128" placeholder="e.g. Pune-to-Mumbai"></label>
+    <div class="row">
+      <label>Local GW <input id="vdLocalGw" required placeholder="203.0.113.10"></label>
+      <label>Remote GW <input id="vdRemoteGw" required placeholder="198.51.100.20 or vpn.example.com"></label>
+    </div>
+    <div class="row">
+      <label>Local subnet <textarea id="vdLocalSub" required rows="2" placeholder="192.168.1.0/24, 192.168.2.0/24"></textarea></label>
+      <label>Remote subnet <textarea id="vdRemoteSub" required rows="2" placeholder="10.20.0.0/16"></textarea></label>
+    </div>
+    <label>Description <input id="vdDesc" maxlength="1000" placeholder="Optional"></label>
+    <div class="msg" id="vdDialogMsg"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Cancel</button>
+      <button type="submit" class="btn" id="vdSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Import VPNs from CSV -->
+<dialog id="vdImportDialog" class="wide">
+  <form method="dialog" id="vdImportForm">
+    <h2>Import VPN details from CSV</h2>
+    <p class="sub">Columns: <code>VPN Name,Local GW,Remote GW,Local Subnet,Remote Subnet,Description</code> (Description optional).
+      Put several subnets in one cell separated by commas, in quotes. <a href="/api/vpndocs/template">Download template</a>.
+      Invalid and duplicate rows are skipped. In Excel use Save As &rarr; CSV.</p>
+    <label>CSV file <input type="file" id="vdImportFile" accept=".csv" required></label>
+    <div class="msg" id="vdImportMsg"></div>
+    <div class="table-wrap" id="vdImportWrap" hidden style="max-height:260px">
+      <table><thead><tr><th>Line</th><th>VPN name</th><th>Result</th></tr></thead><tbody id="vdImportBody"></tbody></table>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" data-close>Close</button>
+      <button type="submit" class="btn" id="vdImportSubmit">Import</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Change own password -->
 <dialog id="pwDialog">
   <form method="dialog" id="pwForm">
@@ -569,6 +639,7 @@ function showTab(name) {
   if (name === "machosts" && !macsLoaded) { macsLoaded = true; loadMacHosts(); $("macSearch").focus(); }
   if (name === "subnetsearch" || name === "freesubnets") loadSubnetStatus();
   if (name === "portfwd") loadPortForwards();
+  if (name === "vpndoc") loadVpnDocs();
   if (name === "fwdata") loadFwData();
   if (name === "users") loadUsers();
   if (name === "activity") loadAudit();
@@ -926,6 +997,121 @@ $("pfImportForm").onsubmit = e => {
       showMsg("pfImportMsg", `${added} added, ${results.length - added} skipped.`, added ? "ok" : "err");
       await loadPortForwards();
     } catch (err) { showMsg("pfImportMsg", err.message, "err"); }
+  });
+};
+
+// ---- VPN details (documentation)
+let vdList = [], vdEditing = null, vdShown = [];
+const vdSel = new Set();
+async function loadVpnDocs() {
+  try {
+    vdList = (await api("/api/vpndocs")).items;
+    vdSel.forEach(id => { if (!vdList.some(r => r.id === id)) vdSel.delete(id); });
+    renderVpnDocs();
+  } catch (e) { showMsg("vdMsg", e.message, "err"); }
+}
+function renderVpnDocs() {
+  const tokens = $("vdSearch").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = vdList.filter(r => tokens.every(t => [r.name, r.local_gw, r.remote_gw, r.local_subnet, r.remote_subnet, r.description].join(" ").toLowerCase().includes(t)));
+  vdShown = shown;
+  const body = $("vdBody"); body.replaceChildren();
+  if (!shown.length) {
+    const tr = document.createElement("tr");
+    cell(tr, vdList.length ? "No VPN records match your search." : "No VPN records yet. Click \"Add VPN\" or \"Import CSV\".", "empty").colSpan = 8;
+    body.appendChild(tr);
+  }
+  shown.forEach(r => {
+    const tr = document.createElement("tr");
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = vdSel.has(r.id); cb.setAttribute("aria-label", "Select record");
+    cb.onchange = () => { cb.checked ? vdSel.add(r.id) : vdSel.delete(r.id); vdSelUpdate(); };
+    cell(tr, "").appendChild(cb);
+    cell(tr, r.name).style.fontWeight = 600; cell(tr, r.local_gw, "mono"); cell(tr, r.remote_gw, "mono");
+    cell(tr, r.local_subnet, "mono"); cell(tr, r.remote_subnet, "mono"); cell(tr, r.description);
+    const act = cell(tr, ""); act.className = "actions";
+    const edit = document.createElement("button"); edit.className = "btn secondary small"; edit.textContent = "Edit";
+    edit.onclick = () => openVdDialog(r); act.appendChild(edit);
+    body.appendChild(tr);
+  });
+  vdSelUpdate();
+  $("vdSummary").textContent = `${vdList.length} record${vdList.length === 1 ? "" : "s"}` +
+    (shown.length !== vdList.length ? ` · showing ${shown.length}` : "") + ". Documentation only: nothing is read from or pushed to a firewall.";
+}
+function vdSelUpdate() {
+  const n = vdSel.size, inView = vdShown.filter(r => vdSel.has(r.id)).length;
+  $("vdExportSelBtn").hidden = !n; $("vdExportSelBtn").textContent = `Export selected (${n})`;
+  if ($("vdDeleteSelBtn")) { $("vdDeleteSelBtn").hidden = !n; $("vdDeleteSelBtn").textContent = `Delete selected (${n})`; }
+  $("vdSelAll").checked = !!vdShown.length && inView === vdShown.length;
+  $("vdSelAll").indeterminate = inView > 0 && inView < vdShown.length;
+  document.querySelectorAll("#vdBody tr").forEach((tr, i) => tr.classList.toggle("active-fw", vdSel.has(vdShown[i]?.id)));
+}
+$("vdSelAll").onchange = e => {
+  vdShown.forEach(r => e.target.checked ? vdSel.add(r.id) : vdSel.delete(r.id));
+  document.querySelectorAll("#vdBody input[type=checkbox]").forEach(cb => cb.checked = e.target.checked);
+  vdSelUpdate();
+};
+async function vdExport(btn, ids) {
+  await busy(btn, async () => {
+    try {
+      const res = ids ? await fetch("/api/vpndocs/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) })
+                      : await fetch("/api/vpndocs/export");
+      if (res.status === 401) { window.location = "/login"; return; }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || `HTTP ${res.status}`);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(await res.blob()); a.download = "vpn_details.csv";
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      showMsg("vdMsg", ids ? `Exported ${ids.length} selected record${ids.length === 1 ? "" : "s"}.` : "Exported all records.", "ok");
+    } catch (e) { showMsg("vdMsg", e.message, "err"); }
+  });
+}
+$("vdExportBtn").onclick = () => vdExport($("vdExportBtn"), null);
+$("vdExportSelBtn").onclick = () => vdExport($("vdExportSelBtn"), [...vdSel]);
+if ($("vdDeleteSelBtn")) {
+  $("vdDeleteSelBtn").onclick = () => {
+    const ids = [...vdSel];
+    if (!confirm(`Delete ${ids.length} selected record${ids.length === 1 ? "" : "s"}? (Nothing is changed on any firewall.)`)) return;
+    busy($("vdDeleteSelBtn"), async () => {
+      try { const d = await jsonPost("/api/vpndocs/delete", { ids }); vdSel.clear(); showMsg("vdMsg", d.message, "ok"); await loadVpnDocs(); }
+      catch (e) { showMsg("vdMsg", e.message, "err"); }
+    });
+  };
+}
+let vdSearchTimer;
+$("vdSearch").oninput = () => { clearTimeout(vdSearchTimer); vdSearchTimer = setTimeout(renderVpnDocs, 120); };
+function openVdDialog(r) {
+  vdEditing = r || null; openDialog("vdDialog");
+  $("vdDialogTitle").textContent = r ? "Edit VPN" : "Add VPN";
+  $("vdName").value = r?.name || ""; $("vdLocalGw").value = r?.local_gw || ""; $("vdRemoteGw").value = r?.remote_gw || "";
+  $("vdLocalSub").value = r?.local_subnet || ""; $("vdRemoteSub").value = r?.remote_subnet || ""; $("vdDesc").value = r?.description || "";
+}
+$("vdAddBtn").onclick = () => openVdDialog(null);
+$("vdForm").onsubmit = e => {
+  e.preventDefault();
+  const body = { name: $("vdName").value, local_gw: $("vdLocalGw").value, remote_gw: $("vdRemoteGw").value,
+                 local_subnet: $("vdLocalSub").value, remote_subnet: $("vdRemoteSub").value, description: $("vdDesc").value };
+  busy($("vdSave"), async () => {
+    try {
+      const d = vdEditing ? await jsonPost(`/api/vpndocs/${vdEditing.id}`, body, "PUT") : await jsonPost("/api/vpndocs", body);
+      $("vdDialog").close(); showMsg("vdMsg", d.message, "ok"); await loadVpnDocs();
+    } catch (err) { showMsg("vdDialogMsg", err.message, "err"); }
+  });
+};
+$("vdImportBtn").onclick = () => { openDialog("vdImportDialog"); $("vdImportWrap").hidden = true; };
+$("vdImportForm").onsubmit = e => {
+  e.preventDefault();
+  const form = new FormData(); form.append("file", $("vdImportFile").files[0]);
+  busy($("vdImportSubmit"), async () => {
+    try {
+      const { results } = await api("/api/vpndocs/import", { method: "POST", body: form });
+      const body = $("vdImportBody"); body.replaceChildren();
+      results.forEach(r => {
+        const tr = document.createElement("tr"); cell(tr, r.line); cell(tr, r.name);
+        const b = document.createElement("span"); b.className = `badge ${r.ok ? "ok" : "warn"}`; b.textContent = r.ok ? "Added" : r.reason;
+        cell(tr, "").appendChild(b); body.appendChild(tr);
+      });
+      $("vdImportWrap").hidden = false;
+      const added = results.filter(r => r.ok).length;
+      showMsg("vdImportMsg", `${added} added, ${results.length - added} skipped.`, added ? "ok" : "err");
+      await loadVpnDocs();
+    } catch (err) { showMsg("vdImportMsg", err.message, "err"); }
   });
 };
 
@@ -1519,7 +1705,7 @@ if ($("createUserForm")) $("createUserForm").onsubmit = e => {
 };
 
 // ---- Activity log (admins only)
-const CATEGORY_LABELS = { auth: "Sign-in", firewall: "Firewall", iphost: "IP hosts", machost: "MAC hosts", dhcp: "DHCP", subnet: "Subnet tools", portforward: "Port forwards", users: "Users", audit: "Activity log" };
+const CATEGORY_LABELS = { auth: "Sign-in", firewall: "Firewall", iphost: "IP hosts", machost: "MAC hosts", dhcp: "DHCP", subnet: "Subnet tools", portforward: "Port forwards", vpndoc: "VPN details", users: "Users", audit: "Activity log" };
 
 function auditQuery() {
   // Dates are the viewer's local days, sent as exact UTC instants.

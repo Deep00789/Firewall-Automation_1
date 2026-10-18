@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import config
 
 LOG_FILE = config.data_path("audit.log")
-CATEGORIES = ("auth", "firewall", "iphost", "machost", "dhcp", "portforward", "users", "audit")
+CATEGORIES = ("auth", "firewall", "iphost", "machost", "dhcp", "portforward", "vpndoc", "users", "audit")
 _lock = threading.Lock()
 
 

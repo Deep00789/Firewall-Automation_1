@@ -66,6 +66,7 @@ FirewallAutomation/
 ├── MACHost.py                      # List MAC hosts; append MACs to a MAC List host
 ├── Sophos_Dhcp.py                  # DHCP servers, static lease validation/import/export
 ├── portforwards.py                 # Port-forward documentation records (portforwards.json), CSV import / export
+├── vpndocs.py                      # VPN detail documentation records (vpndocs.json), CSV import / export
 ├── subnet_tools.py                 # IP / subnet search, free subnets, live host scan (nmap)
 ├── sophos_firewall_api.py          # Stand-alone REST (v2) client example (not used by the portal)
 ├── requirements.txt                # Python dependencies
@@ -493,6 +494,10 @@ Endpoints marked 🔌 need a connected firewall; 🔒 are admin-only.
 ## Changelog
 
 Built from the git history (`git log`), newest first.
+
+### 2026-10-18 – VPN details documentation
+- New **Documents → VPN Details** page, next to Port Forwarding Rules: a manual record of VPN tunnels with VPN name, Local GW, Remote GW, Local Subnet, Remote Subnet and Description (optional). Stored in `vpndocs.json`; not read from or pushed to any firewall.
+- Add, edit, CSV import (template at `/api/vpndocs/template`), export of all or selected rows, and admin-only bulk delete. Gateways accept an IPv4 address or a host name; subnets accept several IPv4 networks separated by commas. VPN names must be unique. Audited as category `vpndoc`.
 
 ### 2026-10-18 – Port forward documentation
 - New **Documents → Port Forwarding Rules** section in the side menu (separate from the firewall tools): a manual record of port-forwarding rules with the fields Rule No (optional), Port (optional), Public IP, Private IP, External Port, Internal Port, Requestor (optional), Sites and Description (optional). Records are stored in `portforwards.json` and are not pushed to any firewall.

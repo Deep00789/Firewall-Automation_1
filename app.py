@@ -23,6 +23,7 @@ import firewalls
 import IPHost
 import MACHost
 import portforwards
+import vpndocs
 import Sophos_Dhcp
 import Sophos_Login_And_Sendrequest as sophoslogin
 import subnet_tools
@@ -338,6 +339,72 @@ def portforwards_export():
 def portforwards_template():
     return Response(portforwards.template_csv(), mimetype="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="port_forwards_template.csv"'})
+
+
+# ---- VPN documentation (manual records, independent of the connected firewall)
+@app.get("/api/vpndocs")
+def vpndocs_list():
+    return jsonify({"ok": True, "items": vpndocs.list_all()})
+
+
+@app.post("/api/vpndocs")
+def vpndocs_add():
+    d = request.get_json(force=True)
+    with audited("vpndoc", "Add VPN", d.get("name", "")):
+        r = vpndocs.add(d, g.user)
+        record("vpndoc", "Add VPN", r["name"], f"{r['local_gw']} <-> {r['remote_gw']}; local: {r['local_subnet']}; remote: {r['remote_subnet']}", firewall="")
+    return jsonify({"ok": True, "message": f"VPN '{r['name']}' added.", "item": r})
+
+
+@app.put("/api/vpndocs/<rec_id>")
+def vpndocs_update(rec_id):
+    d = request.get_json(force=True)
+    with audited("vpndoc", "Edit VPN", rec_id):
+        r, changed = vpndocs.update(rec_id, d, g.user)
+        record("vpndoc", "Edit VPN", r["name"], f"Changed: {', '.join(changed) or 'nothing'}", firewall="")
+    return jsonify({"ok": True, "message": f"VPN '{r['name']}' updated.", "item": r})
+
+
+@app.post("/api/vpndocs/delete")
+@admin_only
+def vpndocs_delete():
+    ids = request.get_json(force=True).get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"ok": False, "message": "Select at least one record."}), 400
+    with audited("vpndoc", "Delete VPNs", f"{len(ids)} selected"):
+        gone = vpndocs.delete_many(ids)
+        record("vpndoc", "Delete VPNs", f"{len(gone)} records", "; ".join(r["name"] for r in gone)[:1900], firewall="")
+    return jsonify({"ok": True, "message": f"{len(gone)} VPN record{'s' if len(gone) != 1 else ''} deleted.", "deleted": len(gone)})
+
+
+@app.post("/api/vpndocs/import")
+def vpndocs_import():
+    file = request.files["file"]
+    with audited("vpndoc", "Import VPNs", file.filename):
+        results = vpndocs.import_csv(file.read().decode("utf-8-sig"), g.user)
+        added = sum(r["ok"] for r in results)
+        record("vpndoc", "Import VPNs", file.filename, f"{added} added, {len(results) - added} skipped", firewall="")
+    return jsonify({"ok": True, "results": results})
+
+
+@app.route("/api/vpndocs/export", methods=["GET", "POST"])
+def vpndocs_export():
+    """All records, or only the ids posted as {"ids": [...]}."""
+    items = vpndocs.list_all()
+    if request.method == "POST":
+        ids = set(request.get_json(force=True).get("ids") or [])
+        if not ids:
+            return jsonify({"ok": False, "message": "Select at least one record."}), 400
+        items = [r for r in items if r["id"] in ids]
+    record("vpndoc", "Export VPNs", "selected" if request.method == "POST" else "all", f"{len(items)} records", firewall="")
+    return Response(vpndocs.to_csv(items), mimetype="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="vpn_details.csv"'})
+
+
+@app.get("/api/vpndocs/template")
+def vpndocs_template():
+    return Response(vpndocs.template_csv(), mimetype="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="vpn_details_template.csv"'})
 
 
 # ---- Firewall inventory & connection
