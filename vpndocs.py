@@ -76,9 +76,34 @@ def _clean(d):
     return rec
 
 
+def _networks(text):
+    """The IPv4 networks in a stored subnet list ("10.0.0.0/24, 10.0.1.0/24")."""
+    return [ipaddress.IPv4Network(t, strict=False) for t in re.split(r"[,;\s]+", text or "") if t]
+
+
+def _overlap(a, b):
+    """True if any network in subnet list a overlaps any network in subnet list b (CIDR containment or partial overlap)."""
+    nets_b = _networks(b)
+    return any(x.overlaps(y) for x in _networks(a) for y in nets_b)
+
+
 def _check_dup(items, rec, skip_id=None):
-    if any(r["id"] != skip_id and r["name"].lower() == rec["name"].lower() for r in items):
-        raise ValueError(f"A VPN named '{rec['name']}' is already documented.")
+    """Reject a repeated VPN name, a repeated Local GW + Remote GW pair (the two together are one entity),
+    or a subnet selector pair that overlaps one existing tunnel on both sides."""
+    for r in items:
+        if r["id"] == skip_id:
+            continue
+        if r["name"].lower() == rec["name"].lower():
+            raise ValueError(f"A VPN named '{rec['name']}' is already documented.")
+        if (r["local_gw"].lower(), r["remote_gw"].lower()) == (rec["local_gw"].lower(), rec["remote_gw"].lower()):
+            raise ValueError(f"Local GW {rec['local_gw']} with Remote GW {rec['remote_gw']} is already used in VPN '{r['name']}'.")
+    # Policy-based selectors: both sides must overlap the SAME existing tunnel. Checked per tunnel, so a local overlap on one
+    # tunnel and a remote overlap on another is not a conflict.
+    for r in items:
+        if r["id"] != skip_id and _overlap(rec["local_subnet"], r["local_subnet"]) and _overlap(rec["remote_subnet"], r["remote_subnet"]):
+            raise ValueError(f"The local/remote subnet combination conflicts with existing VPN tunnel '{r['name']}': "
+                             f"local {rec['local_subnet']} overlaps {r['local_subnet']} and "
+                             f"remote {rec['remote_subnet']} overlaps {r['remote_subnet']}.")
 
 
 def list_all():
