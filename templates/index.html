@@ -204,18 +204,19 @@
           <tbody id="leaseBody"></tbody></table>
         </div>
       </div>
-      <div class="add-lease">
-        <h3>Add a static lease</h3>
-        <p class="sub" id="addLeaseHint">Bind a MAC address to an IP. Same checks as the CSV import: valid MAC/IP, inside the subnet, outside the dynamic range, no duplicates.</p>
-        <form class="row" id="addLeaseForm" autocomplete="off">
-          <label>Hostname <input id="leaseHost" required maxlength="63" placeholder="e.g. PRINTER-2F"></label>
-          <label>MAC address <input id="leaseMac" required placeholder="AA:BB:CC:DD:EE:FF"></label>
-          <label>IP address <input id="leaseIp" required placeholder="192.168.29.20"></label>
-          <button class="btn secondary" id="leaseCheckBtn" type="button">Check MAC</button>
-          <button class="btn" id="addLeaseBtn" type="submit">Add lease</button>
-        </form>
-        <div class="msg" id="leaseCheckMsg"></div>
-        <div class="msg" id="addLeaseMsg"></div>
+    </div>
+    <div class="card">
+      <h2>Quick add static leases</h2>
+      <p class="sub">Target server: <strong id="quickTarget">none selected</strong>. One lease per line: <code>hostname,mac,ip</code>. Hostname and IP are optional: <code>mac</code>, <code>hostname,mac</code>, <code>mac,ip</code> or <code>,mac,ip</code>. A missing hostname becomes the MAC without separators (<code>aa:aa:aa:bb:bb:bb</code> → <code>aaaaaabbbbbb</code>); a missing IP is the first free address in the DHCP subnet outside the dynamic range. Preview first. Nothing is sent to the firewall until you click Apply.</p>
+      <label style="display:block">Leases <textarea id="quickText" rows="6" style="width:100%;font-family:monospace" placeholder="PRINTER-2F,AA:BB:CC:DD:EE:01,192.168.29.20&#10;AA:BB:CC:DD:EE:02&#10;LAPTOP-7,AA-BB-CC-DD-EE-03"></textarea></label>
+      <div class="row">
+        <button class="btn secondary" id="quickPreviewBtn">Preview</button>
+        <button class="btn" id="quickApplyBtn" disabled>Apply valid leases</button>
+      </div>
+      <div class="msg" id="quickMsg"></div>
+      <div class="table-wrap" id="quickPreviewWrap" hidden>
+        <table><thead><tr><th>Status</th><th>Hostname</th><th>MAC address</th><th>IP address</th><th>Reason / note</th></tr></thead>
+        <tbody id="quickPreviewBody"></tbody></table>
       </div>
     </div>
     <div class="card">
@@ -693,7 +694,7 @@ function setCurrentFirewall(fw) {
   $("disconnectBtn").hidden = !on;
   setTabsLocked(!on);
   hostsLoaded = macsLoaded = false;  // host / DHCP data belongs to the previous firewall
-  selectedServer = ""; $("dhcpDetailCard").hidden = true; $("serverTableWrap").hidden = true; $("csvTarget").textContent = "none selected";
+  selectedServer = ""; $("dhcpDetailCard").hidden = true; $("serverTableWrap").hidden = true; $("csvTarget").textContent = $("quickTarget").textContent = "none selected";
   renderFirewalls();
 }
 
@@ -1332,8 +1333,9 @@ async function loadServers() {
 function selectServer(name) {
   selectedServer = name;
   document.querySelectorAll("#serverBody tr").forEach(tr => tr.style.background = tr.dataset.name === name ? "var(--accent-soft)" : "");
-  $("dhcpTitle").textContent = name; $("csvTarget").textContent = name;
-  $("applyBtn").disabled = true; $("previewWrap").hidden = true; hideMsg("csvMsg"); hideMsg("addLeaseMsg"); hideMsg("leaseCheckMsg"); $("addLeaseForm").reset();
+  $("dhcpTitle").textContent = name; $("csvTarget").textContent = name; $("quickTarget").textContent = name;
+  $("quickApplyBtn").disabled = true; $("quickPreviewWrap").hidden = true; hideMsg("quickMsg");
+  $("applyBtn").disabled = true; $("previewWrap").hidden = true; hideMsg("csvMsg");
   $("dhcpDetailCard").hidden = false;
   loadDhcp().then(() => $("dhcpDetailCard").scrollIntoView({ behavior: "smooth", block: "start" }));
 }
@@ -1358,17 +1360,12 @@ async function loadDhcp() {
     s.leases.sort((a, b) => ipKey(a.IpAdd) - ipKey(b.IpAdd));
     s.leases.forEach((l, i) => { const tr = document.createElement("tr"); cell(tr, i + 1); cell(tr, l.HName); cell(tr, l.MAC_Add, "mono"); cell(tr, l.IpAdd, "mono"); body.appendChild(tr); });
     $("dhcpInfo").hidden = false;
-    $("addLeaseHint").textContent = `Bind a MAC address to an IP in ${s.params.Gateway || "the interface"} / ${s.params.SubnetMask}` +
-      (s.dynamic_ranges.length ? `, outside the dynamic range ${s.dynamic_ranges.join(", ")}.` : ".") +
-      " Duplicates of an existing hostname, MAC or IP are rejected.";
-    if (s.params.Gateway) $("leaseIp").placeholder = s.params.Gateway.replace(/\.\d+$/, ".20");
   } catch (e) { showMsg("dhcpMsg", e.message, "err"); $("dhcpInfo").hidden = true; }
 }
 $("dhcpLoadBtn").onclick = () => busy($("dhcpLoadBtn"), loadServers);
 
 // ---- MAC binding check (searches every DHCP server's static leases)
 const lookupBinding = q => api(`/api/dhcp-lookup?q=${encodeURIComponent(q)}`);
-const bindingText = m => `${m.server} (${m.interface}): ${m.HName || "no hostname"} ${m.MAC_Add} → ${m.IpAdd}`;
 
 $("bindCheckForm").onsubmit = e => {
   e.preventDefault();
@@ -1392,49 +1389,17 @@ $("bindCheckForm").onsubmit = e => {
   });
 };
 
-// Checks the MAC typed in the add-lease form. Returns the matches, or null if the check failed.
-async function checkLeaseMac() {
-  hideMsg("leaseCheckMsg");
-  const mac = $("leaseMac").value.trim();
-  if (!mac) { showMsg("leaseCheckMsg", "Enter a MAC address first.", "err"); return null; }
-  try {
-    const d = await lookupBinding(mac);
-    if (d.kind !== "mac") { showMsg("leaseCheckMsg", "Enter a full MAC address (e.g. AA:BB:CC:DD:EE:FF).", "err"); return null; }
-    if (!d.matches.length) showMsg("leaseCheckMsg", `${d.query} is not bound on any DHCP server.`, "ok");
-    else showMsg("leaseCheckMsg", `${d.query} is already bound: ${d.matches.map(bindingText).join("; ")}`, "err");
-    return d.matches;
-  } catch (err) { showMsg("leaseCheckMsg", err.message, "err"); return null; }
-}
-$("leaseCheckBtn").onclick = () => busy($("leaseCheckBtn"), checkLeaseMac);
-
-// Manual single static lease
-$("addLeaseForm").onsubmit = e => {
-  e.preventDefault();
-  const body = { hostname: $("leaseHost").value.trim(), mac: $("leaseMac").value.trim(), ip: $("leaseIp").value.trim() };
-  busy($("addLeaseBtn"), async () => {
-    // Always verify the MAC across all DHCP servers before adding.
-    const matches = await checkLeaseMac();
-    if (matches === null) return;
-    let question = `Add static lease on "${dhcpName()}"?\n\n${body.hostname}\n${body.mac} → ${body.ip}`;
-    if (matches.length) question = `WARNING: this MAC is already bound:\n${matches.map(bindingText).join("\n")}\n\n` + question;
-    if (!confirm(question)) return;
-    try {
-      const d = await jsonPost(`/api/dhcp/${encodeURIComponent(dhcpName())}/add`, body);
-      hideMsg("leaseCheckMsg"); showMsg("addLeaseMsg", d.message, "ok"); $("addLeaseForm").reset(); await loadDhcp(); loadServers();
-    } catch (err) { showMsg("addLeaseMsg", err.message, "err"); }
-  });
-};
 $("dhcpExportBtn").onclick = () => { window.location = `/api/dhcp/${encodeURIComponent(dhcpName())}/export`; };
 
-function renderPreview(results) {
-  const body = $("previewBody"); body.replaceChildren();
+function renderPreview(results, bodyId = "previewBody", wrapId = "previewWrap") {
+  const body = $(bodyId); body.replaceChildren();
   results.forEach(r => {
     const tr = document.createElement("tr");
     const b = document.createElement("span"); b.className = `badge ${r.ok ? "ok" : "warn"}`; b.textContent = r.ok ? "Will add" : "Skip";
-    cell(tr, "").appendChild(b); cell(tr, r.HName); cell(tr, r.MAC_Add, "mono"); cell(tr, r.IpAdd, "mono"); cell(tr, r.reason);
+    cell(tr, "").appendChild(b); cell(tr, r.HName); cell(tr, r.MAC_Add, "mono"); cell(tr, r.IpAdd, "mono"); cell(tr, r.reason || r.note || "");
     body.appendChild(tr);
   });
-  $("previewWrap").hidden = false;
+  $(wrapId).hidden = false;
 }
 
 $("previewBtn").onclick = () => busy($("previewBtn"), async () => {
@@ -1461,6 +1426,35 @@ $("applyBtn").onclick = () => {
       renderPreview(d.results); showMsg("csvMsg", `${d.message} — ${d.added} lease(s) added.`, "ok"); loadDhcp(); loadServers();
     } catch (e) { showMsg("csvMsg", e.message, "err"); }
   }).then(() => { $("applyBtn").disabled = true; });
+};
+
+// Quick add: "hostname,mac,ip" lines, preview, then apply through the same /apply endpoint
+let quickRows = [], quickServer = "";
+$("quickPreviewBtn").onclick = () => busy($("quickPreviewBtn"), async () => {
+  hideMsg("quickMsg"); $("quickApplyBtn").disabled = true;
+  const server = dhcpName(), text = $("quickText").value;
+  if (!server) return showMsg("quickMsg", "Load the DHCP servers above and click one to select it first.", "err");
+  try {
+    const d = await jsonPost(`/api/dhcp/${encodeURIComponent(server)}/quick-preview`, { text });
+    // Ignore a late answer: the server or the text changed while the preview was loading.
+    if (server !== dhcpName() || text !== $("quickText").value) return;
+    quickRows = d.results; quickServer = server; renderPreview(quickRows, "quickPreviewBody", "quickPreviewWrap");
+    const good = quickRows.filter(r => r.ok).length;
+    showMsg("quickMsg", `${good} of ${quickRows.length} row(s) will be added to "${server}".`, good ? "info" : "err");
+    $("quickApplyBtn").disabled = good === 0;
+  } catch (e) { showMsg("quickMsg", e.message, "err"); $("quickPreviewWrap").hidden = true; }
+});
+$("quickText").oninput = () => { $("quickApplyBtn").disabled = true; };  // edited since the preview: preview again
+$("quickApplyBtn").onclick = () => {
+  const rows = quickRows.filter(r => r.ok);
+  if (quickServer !== dhcpName()) { $("quickApplyBtn").disabled = true; return showMsg("quickMsg", "The selected server changed. Preview again.", "err"); }
+  if (!confirm(`Add ${rows.length} static lease(s) to DHCP server "${quickServer}"?`)) return;
+  busy($("quickApplyBtn"), async () => {
+    try {
+      const d = await jsonPost(`/api/dhcp/${encodeURIComponent(quickServer)}/apply`, { rows, check_other_servers: true });
+      renderPreview(d.results, "quickPreviewBody", "quickPreviewWrap"); showMsg("quickMsg", `${d.message} — ${d.added} lease(s) added.`, d.ok ? "ok" : "err"); loadDhcp(); loadServers();
+    } catch (e) { showMsg("quickMsg", e.message, "err"); }
+  }).then(() => { $("quickApplyBtn").disabled = true; });
 };
 
 // ---- Side menu (☰)

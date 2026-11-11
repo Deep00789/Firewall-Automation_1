@@ -593,27 +593,35 @@ def preview_leases(name):
     return jsonify({"ok": True, "results": results})
 
 
-@app.post("/api/dhcp/<name>/add")
-def add_single_lease(name):
-    """Add one static lease typed in the portal (same checks as the CSV import)."""
-    d = request.get_json(force=True)
-    row = {"HName": d.get("hostname", "").strip(), "MAC_Add": d.get("mac", "").strip(), "IpAdd": d.get("ip", "").strip()}
-    target = f"{name}: {row['HName']} {row['MAC_Add']} {row['IpAdd']}"
-    with audited("dhcp", "Add static lease", target):
-        result = Sophos_Dhcp.add_static_leases(name, [row])
-    r = result["results"][0]
-    if not r["ok"]:
-        record("dhcp", "Add static lease", target, r["reason"], ok=False)
-        return jsonify({"ok": False, "message": f"Not added: {r['reason']}."}), 400
-    record("dhcp", "Add static lease", target, result["message"])
-    return jsonify({"ok": True, "message": f"Static lease {r['HName']} ({r['MAC_Add']} → {r['IpAdd']}) added.", "lease": r})
+@app.post("/api/dhcp/<name>/quick-preview")
+def quick_preview_leases(name):
+    """Preview leases typed as "hostname,mac,ip" lines (hostname and IP optional). Nothing is sent to the firewall."""
+    d = request.get_json(force=True, silent=True)
+    text = d.get("text") if isinstance(d, dict) else None
+    if not isinstance(text, str):
+        return jsonify({"ok": False, "message": "Send the leases as {\"text\": \"hostname,mac,ip ...\"}."}), 400
+    rows = Sophos_Dhcp.parse_quick_leases(text)
+    if not rows:
+        return jsonify({"ok": False, "message": "Enter at least one line (hostname,mac,ip)."}), 400
+    if len(rows) > 500:
+        return jsonify({"ok": False, "message": "At most 500 lines at a time."}), 400
+    with audited("dhcp", "Quick add preview", name):
+        servers = Sophos_Dhcp.get_dhcp_servers()
+        server = next((s for s in servers if s["name"] == name), None)
+        if server is None:
+            raise sophoslogin.SophosError(f"DHCP server '{name}' not found.")
+        results = Sophos_Dhcp.validate_new_leases(server, Sophos_Dhcp.fill_hostnames(rows), auto_ip=True,
+                                                  bound_elsewhere=Sophos_Dhcp.macs_bound_elsewhere(name, servers))
+    valid = sum(r["ok"] for r in results)
+    record("dhcp", "Quick add preview", name, f"{valid} valid, {len(results) - valid} skipped")
+    return jsonify({"ok": True, "results": results})
 
 
 @app.post("/api/dhcp/<name>/apply")
 def apply_leases(name):
-    rows = request.get_json(force=True)["rows"]
+    d = request.get_json(force=True)
     with audited("dhcp", "Import static leases", name):
-        result = Sophos_Dhcp.add_static_leases(name, rows)
+        result = Sophos_Dhcp.add_static_leases(name, d["rows"], check_other_servers=bool(d.get("check_other_servers")))
     added = [f"{r['HName']} {r['MAC_Add']} {r['IpAdd']}" for r in result["results"] if r["ok"]]
     details = f"Added {result.get('added', 0)}: {'; '.join(added) or 'none'}; {result['message']}"
     record("dhcp", "Import static leases", name, details, ok=result["ok"])

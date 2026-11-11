@@ -127,43 +127,144 @@ def read_lease_csv(file_or_text):
     ]
 
 
-def validate_new_leases(server, new_leases):
-    """Mark each new lease as ok or skipped (with reason). Returns a list of dicts."""
-    params = server["params"]
-    subnet = None
+def _dhcp_subnet(params):
     if params["Gateway"] and params["SubnetMask"]:
         try:
-            subnet = ipaddress.IPv4Network(f"{params['Gateway']}/{params['SubnetMask']}", strict=False)
+            return ipaddress.IPv4Network(f"{params['Gateway']}/{params['SubnetMask']}", strict=False)
         except ValueError:
             pass
+    return None
+
+
+def normalize_mac(text):
+    """AA:BB:CC:DD:EE:FF for any 12-digit MAC written with : - . or no separator; otherwise the text unchanged."""
+    digits = re.sub(r"[:.\-\s]", "", text or "")
+    if re.fullmatch(r"[0-9A-Fa-f]{12}", digits):
+        return ":".join(digits[i:i + 2] for i in range(0, 12, 2)).upper()
+    return (text or "").strip()
+
+
+def _is_mac(text):
+    return bool(MAC_RE.match(normalize_mac(text)))
+
+
+def parse_quick_leases(text):
+    """Read one lease per line: "hostname,mac,ip". Hostname and IP are optional:
+    "mac" | "hostname,mac" | "mac,ip" | "hostname,mac,ip" (leave a field empty to skip it, e.g. ",mac,ip").
+    Blank lines and lines starting with # are ignored."""
+    rows = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p.strip() for p in line.split(",")]
+        row = {"HName": "", "MAC_Add": "", "IpAdd": ""}
+        if len(parts) == 1:
+            row["MAC_Add"] = parts[0]
+        elif len(parts) == 2:
+            # "mac,ip" when the first field is a MAC (even if the IP is mistyped), else "hostname,mac".
+            if _is_mac(parts[0]) and not _is_mac(parts[1]):
+                row["MAC_Add"], row["IpAdd"] = parts
+            else:
+                row["HName"], row["MAC_Add"] = parts
+        elif len(parts) == 3:
+            row["HName"], row["MAC_Add"], row["IpAdd"] = parts
+        else:
+            row["MAC_Add"], row["error"] = line, "Too many fields (use hostname,mac,ip)"
+        rows.append(row)
+    return rows
+
+
+def fill_hostnames(rows):
+    """A missing hostname becomes the MAC without separators, lower case (aa:aa:aa:bb:bb:bb -> aaaaaabbbbbb)."""
+    for r in rows:
+        mac = normalize_mac(r["MAC_Add"])
+        if not r["HName"].strip() and MAC_RE.match(mac):
+            r["HName"], r["note"] = mac.replace(":", "").lower(), "hostname from MAC"
+    return rows
+
+
+def macs_bound_elsewhere(server_name, servers):
+    """{MAC: other DHCP server name} for the static leases of every server except server_name."""
+    return {normalize_mac(l["MAC_Add"]): s["name"] for s in servers if s["name"] != server_name for l in s["leases"]}
+
+
+def _free_ips(server, subnet):
+    """Candidate addresses of the subnet in ascending order, skipping the dynamic ranges."""
+    ranges = []
+    for r in server["dynamic_ranges"]:
+        start, _, end = r.partition("-")
+        ranges.append((int(ipaddress.IPv4Address(start.strip())), int(ipaddress.IPv4Address((end or start).strip()))))
+    hosts = subnet.num_addresses > 2
+    ip, last = int(subnet.network_address) + hosts, int(subnet.broadcast_address) - hosts
+    while ip <= last:
+        inside = next((end for start, end in ranges if start <= ip <= end), None)
+        if inside is not None:
+            ip = inside + 1  # jump over the whole range
+            continue
+        yield str(ipaddress.IPv4Address(ip))
+        ip += 1
+
+
+def validate_new_leases(server, new_leases, auto_ip=False, bound_elsewhere=None):
+    """Mark each new lease as ok or skipped (with reason). Returns a list of dicts, in input order.
+
+    auto_ip: a lease without an IP gets the lowest free address of the DHCP subnet (outside the dynamic range, not
+             the gateway, not taken). Leases with an IP are checked first, so a free address is only handed out
+             once the explicit IPs are known, and only to a lease that passed every other check.
+    bound_elsewhere: {MAC: server name}; such a MAC is skipped (see macs_bound_elsewhere).
+    """
+    subnet = _dhcp_subnet(server["params"])
 
     taken_names = {l["HName"].lower() for l in server["leases"]}
-    taken_macs = {l["MAC_Add"].upper().replace("-", ":") for l in server["leases"]}
+    taken_macs = {normalize_mac(l["MAC_Add"]) for l in server["leases"]}
     taken_ips = {l["IpAdd"] for l in server["leases"]}
+    bound_elsewhere = bound_elsewhere or {}
+    free = None
 
-    results = []
-    for lease in new_leases:
-        name, mac, ip = lease["HName"], lease["MAC_Add"].upper().replace("-", ":"), lease["IpAdd"]
+    order = range(len(new_leases))
+    if auto_ip:
+        order = sorted(order, key=lambda i: not new_leases[i]["IpAdd"].strip())
+    results = [None] * len(new_leases)
+    for i in order:
+        lease = new_leases[i]
+        name, mac, ip = lease["HName"].strip(), normalize_mac(lease["MAC_Add"]), lease["IpAdd"].strip()
+        note = lease.get("note", "")
         reason = None
         try:
             ip_obj = ipaddress.IPv4Address(ip)
         except ValueError:
             ip_obj = None
 
-        if not name:
-            reason = "Hostname is empty"
+        if lease.get("error"):
+            reason = lease["error"]
         elif not MAC_RE.match(mac):
             reason = "Invalid MAC address"
+        elif not name:
+            reason = "Hostname is empty"
+        elif name.lower() in taken_names:
+            reason = "Hostname already exists"
+        elif mac in taken_macs:
+            reason = "MAC already exists"
+        elif mac in bound_elsewhere:
+            reason = f"MAC already bound on DHCP server '{bound_elsewhere[mac]}'"
+        elif auto_ip and not ip:
+            if subnet is None:
+                reason = "Cannot pick a free IP: the DHCP server has no gateway/subnet mask"
+            else:
+                if free is None:
+                    free = _free_ips(server, subnet)
+                ip = next((c for c in free if c not in taken_ips and c != server["params"]["Gateway"]), "")
+                if ip:
+                    note = ", ".join(filter(None, [note, "IP auto-assigned"]))
+                else:
+                    reason = "No free IP left in the DHCP subnet"
         elif ip_obj is None:
             reason = "Invalid IP address"
         elif subnet and ip_obj not in subnet:
             reason = f"IP is outside DHCP subnet {subnet}"
         elif _in_dynamic_range(ip_obj, server["dynamic_ranges"]):
             reason = "IP is in dynamic range"
-        elif name.lower() in taken_names:
-            reason = "Hostname already exists"
-        elif mac in taken_macs:
-            reason = "MAC already exists"
         elif ip in taken_ips:
             reason = "IP already exists"
 
@@ -172,14 +273,22 @@ def validate_new_leases(server, new_leases):
             taken_names.add(name.lower())
             taken_macs.add(mac)
             taken_ips.add(ip)
-        results.append({"HName": name, "MAC_Add": mac, "IpAdd": ip, "ok": reason is None, "reason": reason or ""})
+        results[i] = {"HName": name, "MAC_Add": mac, "IpAdd": ip, "ok": reason is None, "reason": reason or "", "note": note}
     return results
 
 
-def add_static_leases(DSerName, new_leases):
-    """Validate and add new static leases while keeping all existing settings and leases."""
-    server = get_existing_leases(DSerName)
-    checked = validate_new_leases(server, new_leases)
+def add_static_leases(DSerName, new_leases, check_other_servers=False):
+    """Validate and add new static leases while keeping all existing settings and leases.
+    check_other_servers: also skip a MAC that is already bound on another DHCP server."""
+    if check_other_servers:
+        servers = get_dhcp_servers()
+        server = next((s for s in servers if s["name"] == DSerName), None)
+        if server is None:
+            raise sophoslogin.SophosError(f"DHCP server '{DSerName}' not found.")
+        checked = validate_new_leases(server, new_leases, bound_elsewhere=macs_bound_elsewhere(DSerName, servers))
+    else:
+        server = get_existing_leases(DSerName)
+        checked = validate_new_leases(server, new_leases)
     to_add = [l for l in checked if l["ok"]]
     if not to_add:
         return {"ok": False, "message": "No valid new leases to add.", "results": checked}

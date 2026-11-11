@@ -286,7 +286,7 @@ Then in `docker-compose.yml` change the port to `"127.0.0.1:5555:5555"` and add 
 
 ### 4. DHCP
 - Lists DHCP servers and, per server, its settings, dynamic ranges and static leases.
-- **Add a single static lease** (hostname, MAC, IP).
+- **Quick add**: paste one lease per line as `hostname,mac,ip`; hostname and IP are optional (`mac`, `hostname,mac`, `mac,ip`, `,mac,ip`). A missing hostname becomes the MAC without separators (`aa:aa:aa:bb:bb:bb` → `aaaaaabbbbbb`); a missing IP is the lowest free address of the DHCP subnet (outside the dynamic range, not the gateway, not used by another lease or line). MACs may use `:`, `-`, `.` or no separator. **Preview** runs the checks below, plus a check that the MAC is not bound on another DHCP server; **Apply** adds the valid lines.
 - **Bulk import**: upload a CSV → **Preview** shows which rows are valid and why others would be skipped → **Apply** adds the valid rows. Existing settings and leases are preserved.
 - **Export** a server's static leases to CSV (re-importable).
 - **Binding lookup**: search a full/partial MAC or an IP across all DHCP servers.
@@ -485,8 +485,8 @@ Endpoints marked 🔌 need a connected firewall; 🔒 are admin-only.
 | GET | `/api/dhcp-lookup?q=` | Find a MAC/IP in static leases of all servers |
 | GET | `/api/dhcp/<name>` | Server settings, ranges, leases |
 | POST | `/api/dhcp/<name>/preview` | Validate an uploaded lease CSV |
-| POST | `/api/dhcp/<name>/apply` | `{"rows": [...]}` – add validated leases |
-| POST | `/api/dhcp/<name>/add` | `{"hostname", "mac", "ip"}` – add one lease |
+| POST | `/api/dhcp/<name>/quick-preview` | `{"text": "hostname,mac,ip\n..."}` – fill defaults and validate typed lines |
+| POST | `/api/dhcp/<name>/apply` | `{"rows": [...], "check_other_servers": false}` – add validated leases (optionally skip MACs bound on another server) |
 | GET | `/api/dhcp/<name>/export` | Static leases as CSV |
 
 ---
@@ -494,6 +494,11 @@ Endpoints marked 🔌 need a connected firewall; 🔒 are admin-only.
 ## Changelog
 
 Built from the git history (`git log`), newest first.
+
+### 2026-11-10 – DHCP quick add
+- New **Quick add static leases** box on the DHCP page: `hostname,mac,ip` lines with optional hostname (defaults to the MAC without separators) and optional IP (first free address in the DHCP subnet). Preview shows auto-filled values and conflicts (hostname / MAC / IP already used, dynamic range, other-server MAC bindings) before Apply; Apply re-checks everything, including other-server MAC bindings. Lines with an explicit IP are checked first, and a free IP is only handed to a line that passed every other check. Tests: `tests/test_quick_leases.py`.
+- The separate Hostname / MAC / IP form ("Add a static lease") and its `POST /api/dhcp/<name>/add` endpoint were removed; use Quick add instead (a single `hostname,mac,ip` line does the same).
+- MAC addresses in the CSV import now also accept `.` or no separator (`aabb.ccdd.eeff`, `aabbccddeeff`).
 
 ### 2026-10-18 – VPN details documentation
 - New **Documents → VPN Details** page, next to Port Forwarding Rules: a manual record of VPN tunnels with VPN name, Local GW, Remote GW, Local Subnet, Remote Subnet and Description (optional). Stored in `vpndocs.json`; not read from or pushed to any firewall.

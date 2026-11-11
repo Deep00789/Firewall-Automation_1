@@ -226,9 +226,6 @@
   dialog a { color: var(--accent); }
 
   /* ---- DHCP: add single lease */
-  .add-lease { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
-  .add-lease h3 { font-size: 14px; margin: 0 0 4px; }
-  .add-lease p.sub { margin: 0 0 12px; }
   .fw-table td:nth-child(2) { white-space: nowrap; }
 
   /* ---- Side menu (☰ drawer) */
